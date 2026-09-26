@@ -24,10 +24,18 @@ namespace DeterministicIsland.Islands
         }
 
         // A missing safety limit is a dangling reference and must fail loudly (§12.3.3),
-        // never fall back to a value the AI core produced.
-        public static ILMVector Require(StaticVault vault, string query, DateTime asOf) =>
-            vault.Lookup(query, asOf)
-            ?? throw new InvalidOperationException($"Safety limit '{query}' is not registered in the Static Vault at {asOf:O}.");
+        // never fall back to a value the AI core produced. Safety limits are always read
+        // under an engaged Causality Lock, so a pointer chain must end in a deterministic,
+        // currently valid vector.
+        public static ILMVector Require(StaticVault vault, string query, DateTime asOf)
+        {
+            var entry = vault.Lookup(query, asOf)
+                ?? throw new InvalidOperationException($"Safety limit '{query}' is not registered in the Static Vault at {asOf:O}.");
+
+            var causalityLock = new CausalityLock();
+            causalityLock.Engage();
+            return GuardedResolver.ResolveUnderLock(entry, vault, causalityLock, asOf);
+        }
 
         public static string Describe(string query, ILMVector vector) =>
             $"{query} = {vector.Value} ({vector.Determinism!.Version}, approved by {vector.Determinism.ApprovedBy})";

@@ -36,6 +36,30 @@ namespace DeterministicIsland
             _clock = clock ?? (() => DateTime.UtcNow);
         }
 
+        // §12.4.2: answers a factual query in order of guarantee strength. Static Vault first
+        // (following any pointer chain), then a caller-supplied candidate (e.g. from RAG
+        // retrieval), and only then the stochastic generator, signalled by returning null.
+        // With requireDeterminism the Causality Lock is engaged: no silent stochastic fallback.
+        public ILMVector? Answer(string query, ILMVector? candidate = null, bool requireDeterminism = false)
+        {
+            DateTime now = _clock();
+            var causalityLock = new CausalityLock();
+            if (requireDeterminism)
+                causalityLock.Engage();
+
+            var vaultHit = _vault.Lookup(query, now);
+            if (vaultHit is not null)
+                return GuardedResolver.ResolveUnderLock(vaultHit, _vault, causalityLock, now);
+
+            if (candidate is not null)
+                return GuardedResolver.ResolveUnderLock(candidate, _vault, causalityLock, now);
+
+            if (causalityLock.IsEngaged)
+                throw new DeterminismViolationException("No deterministic mechanism resolved this query.");
+
+            return null;
+        }
+
         public ControlCommand Execute(SensorReading reading)
         {
             DateTime now = _clock();
