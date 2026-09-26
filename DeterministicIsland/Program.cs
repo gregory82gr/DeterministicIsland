@@ -7,7 +7,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 4 ARCHITECTURAL SCENARIOS ===");
+        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 6 ARCHITECTURAL SCENARIOS ===");
         var vault = new StaticVault();
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
         var ai = new MiniNeuralNetwork();
@@ -42,6 +42,30 @@ class Program
         ControlCommand finalCommand = arbiter.Execute(r4);
 
         Console.WriteLine($"\n[FINAL SYSTEM STATE] Is Scrammed: {finalCommand.IsScrammed} | Action Driven By: {finalCommand.Origin}");
+
+        // -------------------------------------------------------------------
+        // Σενάριο 5: Causality Lock χωρίς ντετερμινιστική απάντηση -> Human-in-the-Loop
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 5: Causality Lock Without a Deterministic Answer (Human-in-the-Loop) ---");
+        var r5 = new SensorReading(TemperatureCelsius: 60.0, PressureBar: 5.0, "Set the valve within a deterministic island.", RadiationLeakDetected: false);
+        try
+        {
+            arbiter.Execute(r5);
+        }
+        catch (DeterminismViolationException ex)
+        {
+            Console.WriteLine($"[ESCALATED] {ex.Message} The AI command was NOT applied; awaiting operator decision.");
+        }
+
+        // -------------------------------------------------------------------
+        // Σενάριο 6: Causality Lock με Frozen Snapshot -> ίδια απάντηση κάθε φορά
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 6: Causality Lock Resolved by a Frozen Snapshot (Bitwise Reproducible) ---");
+        var frozenCore = new MiniNeuralNetwork(MiniNeuralNetwork.CreateSnapshot(randomSeed: 42));
+        var lockedArbiter = new CompleteSystemArbiter(ai, vault, frozenSnapshot: frozenCore);
+        var first = lockedArbiter.Execute(r5);
+        var second = lockedArbiter.Execute(r5);
+        Console.WriteLine($"[REPRODUCIBILITY] Identical output on repeat: {first.ValveOpeningTarget.Equals(second.ValveOpeningTarget)}");
         Console.WriteLine("=================================================================");
     }
 }
