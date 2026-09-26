@@ -10,7 +10,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 10 ARCHITECTURAL SCENARIOS ===");
+        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 11 ARCHITECTURAL SCENARIOS ===");
 
         // Neural Constitution (§26.4): οι εγγυήσεις που το σύστημα δεν παραβιάζει ποτέ.
         Console.WriteLine("\n[NEURAL CONSTITUTION]");
@@ -158,7 +158,16 @@ class Program
         Console.ForegroundColor = identical && reloadedSetpoint.VectorId == liveSetpoint.VectorId ? ConsoleColor.Cyan : ConsoleColor.Red;
         Console.WriteLine($"[PERSISTENCE] Reloaded {reloaded.VersionCount} versions of {reloaded.Queries.Count} facts from {vaultPath}");
         Console.WriteLine($"[PERSISTENCE] Same history as the live vault: {identical}; relief setpoint = {reloadedSetpoint.Value} bar ({reloadedSetpoint.Determinism!.Version})");
+        Console.WriteLine($"[PERSISTENCE] Hash chain verified; head hash {new JsonLinesIslandRepository(vaultPath).HeadHash}");
         Console.ResetColor();
+
+        // -------------------------------------------------------------------
+        // Σενάριο 11: Ο χειριστής απαντά στην κλιμάκωση του Σεναρίου 9,
+        // αλλά δεν μπορεί να παρακάμψει το SCRAM του Σεναρίου 4
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 11: Operator Override (Answers an Escalation, Never Overrides a Safety Island) ---");
+        arbiter.Execute(r9, new OperatorOverride("Shift Operator A", 0.55, "Answering the uncertainty escalation after checking local gauges."));
+        arbiter.Execute(r4, new OperatorOverride("Shift Operator A", 1.0, "Trying to relieve pressure manually."));
 
         Console.WriteLine($"\n[AUDIT TRAIL] Every control decision above was appended to {auditLog.Path}");
         Console.WriteLine($"[DOMAIN EVENTS] {recorder.Events.OfType<IslandAdded>().Count()} IslandAdded, " +

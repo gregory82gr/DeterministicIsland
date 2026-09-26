@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeterministicIsland", "Dete
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeterministicIsland.Tests", "DeterministicIsland.Tests\DeterministicIsland.Tests.csproj", "{25AA5B0C-4CEE-4B4F-B394-3386FB046959}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeterministicIsland.Api", "DeterministicIsland.Api\DeterministicIsland.Api.csproj", "{5871D375-59BB-422D-84FE-91D2F13DBF1B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{25AA5B0C-4CEE-4B4F-B394-3386FB046959}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{25AA5B0C-4CEE-4B4F-B394-3386FB046959}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{25AA5B0C-4CEE-4B4F-B394-3386FB046959}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5871D375-59BB-422D-84FE-91D2F13DBF1B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5871D375-59BB-422D-84FE-91D2F13DBF1B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5871D375-59BB-422D-84FE-91D2F13DBF1B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5871D375-59BB-422D-84FE-91D2F13DBF1B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
