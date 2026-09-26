@@ -14,6 +14,10 @@ namespace DeterministicIsland.domain
         // §12.4.4: every update requires human sign-off.
         public required string ApprovedBy { get; init; }
 
+        // §12.3.3 Intra-Vector Routing: a vector with IsDeterministic = false may defer to
+        // another vector; resolution follows the pointer and uses the target's determinism.
+        public Guid? PointerTo { get; init; }
+
         public bool IsValidAt(DateTime instant) =>
             instant >= ValidFrom && (ValidTo is null || instant < ValidTo);
     }
