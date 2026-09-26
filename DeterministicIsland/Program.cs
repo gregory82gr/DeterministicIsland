@@ -1,4 +1,5 @@
 ﻿using DeterministicIsland;
+using DeterministicIsland.Audit;
 using DeterministicIsland.domain;
 using DeterministicIsland.Islands;
 using DeterministicIsland.ProbabilisticCore;
@@ -10,8 +11,9 @@ class Program
         Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 6 ARCHITECTURAL SCENARIOS ===");
         var vault = new StaticVault();
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
+        var auditLog = new JsonLinesAuditLog(Path.Combine(AppContext.BaseDirectory, "nexus1-audit.jsonl"));
         var ai = new MiniNeuralNetwork();
-        var arbiter = new CompleteSystemArbiter(ai, vault);
+        var arbiter = new CompleteSystemArbiter(ai, vault, auditLog);
 
         // -------------------------------------------------------------------
         // Σενάριο 1: Κανονική λειτουργία (η AI αποφασίζει, πάντα μέσα στο όριο του Shield)
@@ -62,10 +64,12 @@ class Program
         // -------------------------------------------------------------------
         Console.WriteLine("\n--- Scenario 6: Causality Lock Resolved by a Frozen Snapshot (Bitwise Reproducible) ---");
         var frozenCore = new MiniNeuralNetwork(MiniNeuralNetwork.CreateSnapshot(randomSeed: 42));
-        var lockedArbiter = new CompleteSystemArbiter(ai, vault, frozenSnapshot: frozenCore);
+        var lockedArbiter = new CompleteSystemArbiter(ai, vault, auditLog, frozenSnapshot: frozenCore);
         var first = lockedArbiter.Execute(r5);
         var second = lockedArbiter.Execute(r5);
         Console.WriteLine($"[REPRODUCIBILITY] Identical output on repeat: {first.ValveOpeningTarget.Equals(second.ValveOpeningTarget)}");
+
+        Console.WriteLine($"\n[AUDIT TRAIL] Every decision above was appended to {auditLog.Path}");
         Console.WriteLine("=================================================================");
     }
 }
