@@ -1,4 +1,6 @@
-﻿using DeterministicIsland.domain;
+﻿using DeterministicIsland.Audit;
+using DeterministicIsland.domain;
+using DeterministicIsland.Islands;
 using DeterministicIsland.ProbabilisticCore;
 using System;
 using System.Collections.Generic;
@@ -14,88 +16,128 @@ namespace DeterministicIsland
     public class CompleteSystemArbiter
     {
         private readonly MiniNeuralNetwork _aiCore;
+        private readonly MiniNeuralNetwork? _frozenSnapshot;
+        private readonly StaticVault _vault;
+        private readonly Shield _shield;
+        private readonly IAuditLog _auditLog;
+        private readonly Func<DateTime> _clock;
 
-        public CompleteSystemArbiter(MiniNeuralNetwork aiCore)
+        public CompleteSystemArbiter(MiniNeuralNetwork aiCore, StaticVault vault, IAuditLog auditLog,
+            Func<DateTime>? clock = null, MiniNeuralNetwork? frozenSnapshot = null)
         {
+            if (frozenSnapshot is { IsFrozen: false })
+                throw new ArgumentException("The frozen snapshot core must be created with a FrozenSnapshotConfig.", nameof(frozenSnapshot));
+
             _aiCore = aiCore;
+            _frozenSnapshot = frozenSnapshot;
+            _vault = vault;
+            _shield = new Shield(vault);
+            _auditLog = auditLog;
+            _clock = clock ?? (() => DateTime.UtcNow);
         }
 
         public ControlCommand Execute(SensorReading reading)
         {
-            ControlCommand currentCommand = _aiCore.Predict(reading);
-            List<DynamicIsland> activeIslands = GenerateIslandsOnDemand(reading);
+            DateTime now = _clock();
+            var causalityLock = new CausalityLock();
+            if (CausalityLock.IsRequestedBy(reading.OperatorNotes))
+                causalityLock.Engage();
+
+            // Με ενεργό Causality Lock, μόνο το Frozen Snapshot είναι αποδεκτός πυρήνας (§12.4.3).
+            MiniNeuralNetwork core = causalityLock.IsEngaged && _frozenSnapshot is not null ? _frozenSnapshot : _aiCore;
+            ControlCommand aiProposal = core.Predict(reading);
+
+            // Οι νησίδες αξιολογούνται σε κάθε κύκλο, όχι μόνο όταν το ζητήσει ο χειριστής (§17.6).
+            List<DynamicIsland> activeIslands = IslandCatalog.Triggered(reading, _vault, now);
+
+            AuditRecord Audit(ArbiterDecision decision, ControlCommand? command, bool requiresHumanReview, string? reason = null) => new()
+            {
+                Timestamp = now,
+                Reading = reading,
+                CausalityLockEngaged = causalityLock.IsEngaged,
+                AiProposal = aiProposal.ValveOpeningTarget,
+                AiOrigin = aiProposal.Origin,
+                TriggeredIslands = activeIslands
+                    .Select(i => new IslandSnapshot(i.Name, i.Priority, i.EnforcedOutput, i.Sources))
+                    .ToList(),
+                Decision = decision,
+                FinalValveOpening = command?.ValveOpeningTarget,
+                Origin = command?.Origin ?? "Human-in-the-Loop",
+                RequiresHumanReview = requiresHumanReview,
+                Reason = reason
+            };
 
             if (!activeIslands.Any())
             {
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"[INFO] Safe Zone: No islands triggered. Executing: {currentCommand.Origin} -> {currentCommand.ValveOpeningTarget:P1}");
+                // Χωρίς νησίδα και χωρίς Frozen Snapshot, το Causality Lock δεν επιτρέπει στοχαστική απάντηση:
+                // κλιμάκωση σε άνθρωπο, ποτέ σιωπηλή επιστροφή στο AI (§12.3.3).
+                if (causalityLock.IsEngaged && !core.IsFrozen)
+                {
+                    const string reason = "No deterministic mechanism resolved this reading, but a Causality Lock is engaged.";
+                    _auditLog.Record(Audit(ArbiterDecision.HumanEscalation, null, requiresHumanReview: true, reason));
+
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.WriteLine("[HUMAN-IN-THE-LOOP] Causality Lock engaged, but no deterministic mechanism resolved this reading.");
+                    Console.ResetColor();
+                    throw new DeterminismViolationException(reason);
+                }
+
+                // Ακόμη και χωρίς νησίδα, η πρόταση του AI περνά από το Shield (§17.4).
+                ControlCommand shielded = _shield.Enforce(aiProposal, now);
+                bool wasShielded = shielded != aiProposal;
+                _auditLog.Record(Audit(wasShielded ? ArbiterDecision.AiShielded : ArbiterDecision.AiApproved, shielded, requiresHumanReview: false));
+
+                Console.ForegroundColor = wasShielded ? ConsoleColor.Yellow : ConsoleColor.Green;
+                Console.WriteLine($"[INFO] Safe Zone: No islands triggered. Executing: {shielded.Origin} -> {shielded.ValveOpeningTarget:P1}");
                 Console.ResetColor();
-                return currentCommand;
+                return shielded;
             }
 
             // Ταξινομούμε με βάση την προτεραιότητα
             var sortedIslands = activeIslands.OrderByDescending(i => i.Priority).ToList();
-            double highestPriorityValue = (double)sortedIslands.First().Priority;
+            IslandPriority highestPriority = sortedIslands.First().Priority;
 
             // Βρίσκουμε όλες τις νησίδες που μοιράζονται την ίδια (μέγιστη) προτεραιότητα
-            var topTierIslands = sortedIslands.Where(i => (double)i.Priority == highestPriorityValue).ToList();
+            var topTierIslands = sortedIslands.Where(i => i.Priority == highestPriority).ToList();
 
             // Έλεγχος για αδιέξοδο (Deadlock): Ίδια προτεραιότητα, αλλά διαφορετική απαίτηση εξόδου
             bool hasConflictingDemands = topTierIslands.Select(i => i.EnforcedOutput).Distinct().Count() > 1;
 
             if (topTierIslands.Count > 1 && hasConflictingDemands)
             {
-                // Στρατηγική Fail-Safe / SCRAM (Page 94)
+                // Στρατηγική Fail-Safe / SCRAM: επέκταση του POC, όχι κανόνας του βιβλίου.
+                // Το βιβλίο (§12.4.3, σελ. 94) ζητά η διαφωνία να καταγράφεται για ανθρώπινο έλεγχο,
+                // οπότε η εγγραφή ελέγχου σημειώνεται RequiresHumanReview.
+                var scram = new ControlCommand(0.0, "FAIL-SAFE EMERGENCY SCRAM", IsScrammed: true);
+                _auditLog.Record(Audit(ArbiterDecision.Scram, scram, requiresHumanReview: true,
+                    $"Conflicting demands at the same priority level ({highestPriority}): " +
+                    string.Join(", ", topTierIslands.Select(i => $"{i.Name} -> {i.EnforcedOutput:P1}"))));
+
                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                Console.WriteLine($"\n[FATAL DEADLOCK] Multiple islands triggered at the SAME priority level ({topTierIslands.First().Priority}) with conflicting demands!");
+                Console.WriteLine($"\n[FATAL DEADLOCK] Multiple islands triggered at the SAME priority level ({highestPriority}) with conflicting demands!");
                 foreach (var island in topTierIslands)
                 {
                     Console.WriteLine($"  !! Island: '{island.Name}' demands Valve Opening -> {island.EnforcedOutput:P1}");
                 }
                 Console.WriteLine($"[FAIL-SAFE] Arbiter cannot resolve conflict logically. Triggering immediate SCRAM shutdown procedure...");
+                Console.WriteLine("[AUDIT] Conflict logged for human review (§12.4.3).");
                 Console.ResetColor();
 
-                return new ControlCommand(0.0, "FAIL-SAFE EMERGENCY SCRAM", IsScrammed: true);
+                return scram;
             }
 
             // Αν δεν υπάρχει αδιέξοδο, κερδίζει η κορυφαία νησίδα
             DynamicIsland winningIsland = topTierIslands.First();
+            var command = new ControlCommand(winningIsland.EnforcedOutput, $"Deterministic Island: {winningIsland.Name}");
+            _auditLog.Record(Audit(ArbiterDecision.IslandOverride, command, requiresHumanReview: false));
 
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"[AUDIT OVERRIDE] Island '{winningIsland.Name}' ({winningIsland.Priority}) took control.");
+            foreach (var source in winningIsland.Sources)
+                Console.WriteLine($"  -> Static Vault: {source}");
             Console.ResetColor();
 
-            return new ControlCommand(winningIsland.EnforcedOutput, $"Deterministic Island: {winningIsland.Name}");
-        }
-
-        private List<DynamicIsland> GenerateIslandsOnDemand(SensorReading reading)
-        {
-            var triggeredIslands = new List<DynamicIsland>();
-            string notes = reading.OperatorNotes.ToLower();
-
-            if (notes.Contains("deterministic island") || notes.Contains("retrieve"))
-            {
-                // Νησίδα 1: Κρίσιμη Ασφάλεια Πίεσης (Priority: CriticalSafety)
-                var pressureIsland = new DynamicIsland(
-                    Name: "High Pressure Emergency Loop",
-                    Priority: IslandPriority.CriticalSafety,
-                    Condition: (r) => r.PressureBar >= 8.0,
-                    EnforcedOutput: 1.0 // Ζητάει 100% άνοιγμα βαλβίδας
-                );
-
-                // Νησίδα 2: Κρίσιμη Ασφάλεια Διαρροής Ραδιενέργειας (Priority: CriticalSafety)
-                var radiationIsland = new DynamicIsland(
-                    Name: "Radiation Leak Containment Boundary",
-                    Priority: IslandPriority.CriticalSafety,
-                    Condition: (r) => r.RadiationLeakDetected == true,
-                    EnforcedOutput: 0.0 // Ζητάει 0% (κλείσιμο βαλβίδας) για να εγκλωβίσει τη ραδιενέργεια
-                );
-
-                if (pressureIsland.Condition(reading)) triggeredIslands.Add(pressureIsland);
-                if (radiationIsland.Condition(reading)) triggeredIslands.Add(radiationIsland);
-            }
-
-            return triggeredIslands;
+            return command;
         }
     }
 
