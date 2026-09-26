@@ -9,6 +9,8 @@ A Proof of Concept (POC) demonstrating the **Deterministic Islands** and **Syste
 
 This repository implements a hybrid control system designed for critical industrial infrastructure, wrapping a stochastic (probabilistic) Neural Network inside a strictly predictable, zero-entropy (\(H=0\)) deterministic software shell.
 
+> 🕹️ **Where it all started:** [NEXUS-1 Phase 0](https://gregory82gr.github.io/Nexus-1-phase-0/) is the interactive console for the educational nuclear-plant digital twin that the whole NEXUS-1 series grew from.
+
 > 📘 **New to the field? Start with the guide.** [*Deterministic Islands in Practice — An Engineer-to-Engineer Guide*](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) (PDF, 57 pages) explains the POC step by step as architecture rather than C#. It covers the neural core computed by hand, dropout and MC Dropout, the Static Vault, versions, pointers, derived islands, the Arbiter, the Causality Lock, operator override and the trust infrastructure. It also sets out the approach this POC took beyond the book and ends with graded exercises. See [Documentation](#-documentation).
 
 ---
@@ -164,7 +166,7 @@ python docs/source/build_guide.py          # add --run to embed a fresh demo run
 * The complete list of the author's 22 books is under [The author's books](#%EF%B8%8F-the-authors-books).
 
 ### ✍️ The author's books
-The NEXUS-1 series by **Grigorios Agathangelidis** now counts **22 books**. It began with a single experiment, an interactive console for an educational digital twin of a nuclear plant, and grew one open question at a time. The whole series keeps one standing rule: *nothing is stated as certain that has not been shown to hold in practice*. The books are available on Leanpub:
+The NEXUS-1 series by **Grigorios Agathangelidis** now counts **22 books**. It began with a single experiment, **[NEXUS-1 Phase 0](https://gregory82gr.github.io/Nexus-1-phase-0/)**: an interactive console for an educational digital twin of a nuclear plant, open to anyone. Everything else grew from it, one open question at a time. The whole series keeps one standing rule: *nothing is stated as certain that has not been shown to hold in practice*. The books are available on Leanpub:
 
 👉 **[leanpub.com/u/grigorios-kyriakos-agathangelidis](https://leanpub.com/u/grigorios-kyriakos-agathangelidis)**
 

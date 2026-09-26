@@ -149,8 +149,9 @@ dotnet run          # .NET 8 SDK or later
     s.section("The NEXUS-1 series")
     s.p(
         "<i>From Stochastic Chaos to Deterministic Certainty</i> is one of <b>22 books</b> in the NEXUS-1 "
-        "series by Grigorios Agathangelidis. The series began with a single experiment, an interactive console "
-        "for an educational digital twin of a nuclear plant, and grew one open question at a time into "
+        "series by Grigorios Agathangelidis. The series began with a single experiment, <b>NEXUS-1 Phase 0</b>, "
+        "an interactive console for an educational digital twin of a nuclear plant that anyone can open at "
+        "<font color='#1d4e89'>gregory82gr.github.io/Nexus-1-phase-0</font>. From there it grew one open question at a time into "
         "physics, AI, data, architecture, formal methods, systems and frontend. It keeps one standing rule: "
         "nothing is stated as certain that has not been shown to hold in practice. The books are available at "
         "<font color='#1d4e89'>leanpub.com/u/grigorios-kyriakos-agathangelidis</font>.",
