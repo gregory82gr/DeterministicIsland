@@ -15,10 +15,23 @@ namespace DeterministicIsland.Islands
             operatorNotes.Contains(RequestPhrase, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Human-in-the-Loop escalation: the system reports that it cannot answer
-    // deterministically instead of quietly relaxing the guarantee it was asked for.
-    public sealed class DeterminismViolationException : Exception
+    // Human-in-the-Loop escalation: the system does not act on its own answer and hands
+    // the decision to an operator. The AI command of that cycle is never applied.
+    public abstract class HumanEscalationException : Exception
+    {
+        protected HumanEscalationException(string message) : base(message) { }
+    }
+
+    // The system reports that it cannot answer deterministically instead of quietly
+    // relaxing the guarantee it was asked for (§12.3.3).
+    public sealed class DeterminismViolationException : HumanEscalationException
     {
         public DeterminismViolationException(string message) : base(message) { }
+    }
+
+    // The AI core's MC Dropout interval is wider than the vault permits (§13.6).
+    public sealed class UncertaintyEscalationException : HumanEscalationException
+    {
+        public UncertaintyEscalationException(string message) : base(message) { }
     }
 }

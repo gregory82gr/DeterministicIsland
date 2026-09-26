@@ -1,6 +1,7 @@
 ﻿using DeterministicIsland;
 using DeterministicIsland.Audit;
 using DeterministicIsland.domain;
+using DeterministicIsland.Governance;
 using DeterministicIsland.Islands;
 using DeterministicIsland.ProbabilisticCore;
 
@@ -8,7 +9,16 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 7 ARCHITECTURAL SCENARIOS ===");
+        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 9 ARCHITECTURAL SCENARIOS ===");
+
+        // Neural Constitution (§26.4): οι εγγυήσεις που το σύστημα δεν παραβιάζει ποτέ.
+        Console.WriteLine("\n[NEURAL CONSTITUTION]");
+        for (int i = 0; i < NeuralConstitution.Rules.Count; i++)
+        {
+            var rule = NeuralConstitution.Rules[i];
+            string source = rule.Source == RuleSource.Book ? "book" : "POC extension";
+            Console.WriteLine($"  {i + 1}. {rule.Name} ({source}; {rule.VerifiedBy.Count} tests)");
+        }
         var vault = new StaticVault();
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
         var auditLog = new JsonLinesAuditLog(Path.Combine(AppContext.BaseDirectory, "nexus1-audit.jsonl"));
@@ -94,6 +104,32 @@ class Program
             Console.ForegroundColor = ConsoleColor.Magenta;
             Console.WriteLine($"[HUMAN-IN-THE-LOOP] {ex.Message}");
             Console.ResetColor();
+        }
+
+        // -------------------------------------------------------------------
+        // Σενάριο 8: Παράγωγη νησίδα -> το όριο εκτόνωσης = min(PT-1, PT-2, PT-3)
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 8: Derived Island (Relief Setpoint = Minimum of Three Transmitters) ---");
+        var r8 = new SensorReading(TemperatureCelsius: 60.0, PressureBar: 7.8, "Routine check.", RadiationLeakDetected: false);
+        Console.WriteLine($"[DERIVED] {SafetyLimits.Describe(SafetyLimits.PressureReliefSetpointBar, vault.Resolve(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow))}");
+
+        // Η PT-2 επαναβαθμονομείται στα 7.6 bar: η παράγωγη νησίδα υπολογίζεται ξανά αυτόματα.
+        vault.Register(SafetyLimits.PressureTransmitterLimitsBar[1], 7.6, DateTime.UtcNow, approvedBy: "Instrumentation Engineer");
+        Console.WriteLine($"[DERIVED] {SafetyLimits.Describe(SafetyLimits.PressureReliefSetpointBar, vault.Resolve(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow))}");
+        arbiter.Execute(r8);
+
+        // -------------------------------------------------------------------
+        // Σενάριο 9: Το AI είναι πολύ αβέβαιο (MC Dropout) -> Human-in-the-Loop
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 9: Uncertain AI Prediction (MC Dropout Interval Too Wide -> Human-in-the-Loop) ---");
+        var r9 = new SensorReading(TemperatureCelsius: 85.0, PressureBar: 7.0, "Routine check.", RadiationLeakDetected: false);
+        try
+        {
+            arbiter.Execute(r9);
+        }
+        catch (UncertaintyEscalationException)
+        {
+            Console.WriteLine("[ESCALATED] The AI command was NOT applied; awaiting operator decision.");
         }
 
         Console.WriteLine($"\n[AUDIT TRAIL] Every control decision above was appended to {auditLog.Path}");

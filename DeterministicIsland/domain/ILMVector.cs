@@ -18,6 +18,11 @@ namespace DeterministicIsland.domain
         // another vector; resolution follows the pointer and uses the target's determinism.
         public Guid? PointerTo { get; init; }
 
+        // §24.4.1 Derived island: the exact input vectors this value was computed from,
+        // and the name of the pure function that computed it (e.g. "minimum").
+        public IReadOnlyList<Guid>? DerivedFrom { get; init; }
+        public string? DerivedBy { get; init; }
+
         public bool IsValidAt(DateTime instant) =>
             instant >= ValidFrom && (ValidTo is null || instant < ValidTo);
     }

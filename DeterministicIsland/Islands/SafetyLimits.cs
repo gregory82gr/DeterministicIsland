@@ -7,7 +7,17 @@ namespace DeterministicIsland.Islands
     public static class SafetyLimits
     {
         public const string MaxAiValveOpening = "maximum safe valve opening for ai-proposed commands";
+        public const string MaxAiUncertainty95 = "maximum ai prediction uncertainty as 95% half-width";
         public const string PressureReliefSetpointBar = "high pressure relief setpoint in bar";
+
+        // §24.4.1: three redundant pressure transmitters, each with its own certified maximum.
+        // The relief setpoint is a derived island: the minimum of the three.
+        public static readonly string[] PressureTransmitterLimitsBar =
+        {
+            "maximum safe reading of pressure transmitter pt-1 in bar",
+            "maximum safe reading of pressure transmitter pt-2 in bar",
+            "maximum safe reading of pressure transmitter pt-3 in bar"
+        };
         public const string PressureReliefValveOpening = "valve opening for high pressure relief";
         public const string CoolantTemperatureLimitCelsius = "maximum coolant temperature in celsius";
         public const string StructuralCoolingValveOpening = "valve opening for structural cooling";
@@ -16,7 +26,11 @@ namespace DeterministicIsland.Islands
         public static void SeedDefaults(StaticVault vault, DateTime validFrom, string approvedBy)
         {
             vault.Register(MaxAiValveOpening, 0.75, validFrom, approvedBy);
-            vault.Register(PressureReliefSetpointBar, 8.0, validFrom, approvedBy);
+            vault.Register(MaxAiUncertainty95, 0.20, validFrom, approvedBy);
+            vault.Register(PressureTransmitterLimitsBar[0], 8.4, validFrom, approvedBy);
+            vault.Register(PressureTransmitterLimitsBar[1], 8.0, validFrom, approvedBy);
+            vault.Register(PressureTransmitterLimitsBar[2], 8.2, validFrom, approvedBy);
+            DerivedIslandFactory.DeriveMinimum(vault, PressureReliefSetpointBar, validFrom, approvedBy, PressureTransmitterLimitsBar);
             vault.Register(PressureReliefValveOpening, 1.0, validFrom, approvedBy);
             vault.Register(CoolantTemperatureLimitCelsius, 90.0, validFrom, approvedBy);
             vault.Register(StructuralCoolingValveOpening, 0.6, validFrom, approvedBy);
@@ -27,17 +41,11 @@ namespace DeterministicIsland.Islands
         // never fall back to a value the AI core produced. Safety limits are always read
         // under an engaged Causality Lock, so a pointer chain must end in a deterministic,
         // currently valid vector.
-        public static ILMVector Require(StaticVault vault, string query, DateTime asOf)
-        {
-            var entry = vault.Lookup(query, asOf)
-                ?? throw new InvalidOperationException($"Safety limit '{query}' is not registered in the Static Vault at {asOf:O}.");
-
-            var causalityLock = new CausalityLock();
-            causalityLock.Engage();
-            return GuardedResolver.ResolveUnderLock(entry, vault, causalityLock, asOf);
-        }
+        public static ILMVector Require(StaticVault vault, string query, DateTime asOf) => vault.Resolve(query, asOf);
 
         public static string Describe(string query, ILMVector vector) =>
-            $"{query} = {vector.Value} ({vector.Determinism!.Version}, approved by {vector.Determinism.ApprovedBy})";
+            $"{query} = {vector.Value} ({vector.Determinism!.Version}" +
+            (vector.Determinism.DerivedBy is { } rule ? $", derived: {rule} of {vector.Determinism.DerivedFrom!.Count} inputs" : "") +
+            $", approved by {vector.Determinism.ApprovedBy})";
     }
 }
