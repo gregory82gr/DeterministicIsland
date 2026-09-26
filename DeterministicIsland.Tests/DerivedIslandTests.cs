@@ -116,10 +116,15 @@ public class DerivedIslandTests
         vault.Register(SafetyLimits.PressureTransmitterLimitsBar[1], 7.5, T2, "Engineer");
         var reading = new SensorReading(30.0, 7.8, "", false);
 
-        var before = new CompleteSystemArbiter(new MiniNeuralNetwork(), vault, new InMemoryAuditLog(), () => T2.AddDays(-1)).Execute(reading);
-        var after = new CompleteSystemArbiter(new MiniNeuralNetwork(), vault, new InMemoryAuditLog(), () => T2).Execute(reading);
+        var audit = new InMemoryAuditLog();
 
-        Assert.DoesNotContain("High Pressure", before.Origin);
+        // Below the old 8.0 bar setpoint the AI decides (or, being uncertain, escalates):
+        // either way no pressure island is triggered.
+        try { new CompleteSystemArbiter(new MiniNeuralNetwork(), vault, audit, () => T2.AddDays(-1)).Execute(reading); }
+        catch (HumanEscalationException) { }
+        var after = new CompleteSystemArbiter(new MiniNeuralNetwork(), vault, audit, () => T2).Execute(reading);
+
+        Assert.Empty(audit.Records[0].TriggeredIslands);
         Assert.Contains("High Pressure Emergency Loop", after.Origin);
     }
 }

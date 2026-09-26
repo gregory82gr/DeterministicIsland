@@ -16,6 +16,10 @@ namespace DeterministicIsland.Audit
         public required bool CausalityLockEngaged { get; init; }
         public required double AiProposal { get; init; }
         public required string AiOrigin { get; init; }
+
+        // §13.6: 95% half-width of the MC Dropout interval; null when the core was not sampled.
+        public double? AiUncertainty95 { get; init; }
+
         public required IReadOnlyList<IslandSnapshot> TriggeredIslands { get; init; }
         public required ArbiterDecision Decision { get; init; }
         public double? FinalValveOpening { get; init; }
