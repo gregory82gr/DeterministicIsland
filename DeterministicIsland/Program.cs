@@ -8,7 +8,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 6 ARCHITECTURAL SCENARIOS ===");
+        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 7 ARCHITECTURAL SCENARIOS ===");
         var vault = new StaticVault();
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
         var auditLog = new JsonLinesAuditLog(Path.Combine(AppContext.BaseDirectory, "nexus1-audit.jsonl"));
@@ -69,7 +69,34 @@ class Program
         var second = lockedArbiter.Execute(r5);
         Console.WriteLine($"[REPRODUCIBILITY] Identical output on repeat: {first.ValveOpeningTarget.Equals(second.ValveOpeningTarget)}");
 
-        Console.WriteLine($"\n[AUDIT TRAIL] Every decision above was appended to {auditLog.Path}");
+        // -------------------------------------------------------------------
+        // Σενάριο 7: Intra-Vector Routing -> η γραμμή Β παραπέμπει στο όριο της γραμμής Α
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 7: Intra-Vector Routing (Backup Line Defers to the Primary Setpoint) ---");
+        const string backupLineSetpoint = "high pressure relief setpoint for backup line b in bar";
+        var primarySetpoint = vault.Lookup(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow)!;
+        vault.RegisterPointer(backupLineSetpoint, primarySetpoint.VectorId,
+            validFrom: new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
+
+        var routed = arbiter.Answer(backupLineSetpoint, requireDeterminism: true)!;
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"[ROUTED] '{backupLineSetpoint}' -> vector {routed.VectorId} = {routed.Value} bar ({routed.Determinism!.Version}, deterministic: {routed.Determinism.IsDeterministic})");
+        Console.ResetColor();
+
+        // Ένα ordinary vector από RAG, χωρίς Determinism block, δεν γίνεται δεκτό υπό Causality Lock.
+        var ragCandidate = new ILMVector { VectorId = Guid.NewGuid(), Embedding = new[] { 7.2 } };
+        try
+        {
+            arbiter.Answer("relief setpoint quoted in an old maintenance manual", ragCandidate, requireDeterminism: true);
+        }
+        catch (DeterminismViolationException ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine($"[HUMAN-IN-THE-LOOP] {ex.Message}");
+            Console.ResetColor();
+        }
+
+        Console.WriteLine($"\n[AUDIT TRAIL] Every control decision above was appended to {auditLog.Path}");
         Console.WriteLine("=================================================================");
     }
 }

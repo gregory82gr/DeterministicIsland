@@ -10,9 +10,10 @@ namespace DeterministicIsland.Islands
     // Updates are append-only (§12.4.4): the old vector's ValidTo is closed and a new
     // vector with a new VectorId and an incremented Version is registered.
     // =======================================================================
-    public sealed class StaticVault
+    public sealed class StaticVault : IVectorStore
     {
         private readonly Dictionary<string, List<ILMVector>> _history = new();
+        private readonly Dictionary<Guid, ILMVector> _byId = new();
 
         // Normalisation must be fixed and documented (§12.3.1): lower-cased, whitespace-trimmed.
         public static string Normalize(string query) => query.Trim().ToLowerInvariant();
@@ -23,7 +24,24 @@ namespace DeterministicIsland.Islands
             return Convert.ToHexString(bytes).ToLowerInvariant();
         }
 
-        public ILMVector Register(string query, double value, DateTime validFrom, string approvedBy)
+        public ILMVector Register(string query, double value, DateTime validFrom, string approvedBy) =>
+            Append(query, validFrom, approvedBy, new[] { value }, isDeterministic: true, pointerTo: null);
+
+        // §12.3.3: registers a query whose answer defers to another, already registered vector.
+        // The pointer targets one specific version; when that version is superseded the
+        // pointer becomes stale and resolution fails until a human re-registers it.
+        public ILMVector RegisterPointer(string query, Guid targetVectorId, DateTime validFrom, string approvedBy)
+        {
+            if (!_byId.ContainsKey(targetVectorId))
+                throw new InvalidOperationException($"Cannot register a dangling pointer: vector {targetVectorId} does not exist.");
+
+            return Append(query, validFrom, approvedBy, Array.Empty<double>(), isDeterministic: false, pointerTo: targetVectorId);
+        }
+
+        public ILMVector? Get(Guid vectorId) => _byId.GetValueOrDefault(vectorId);
+
+        private ILMVector Append(string query, DateTime validFrom, string approvedBy, double[] embedding,
+            bool isDeterministic, Guid? pointerTo)
         {
             if (string.IsNullOrWhiteSpace(approvedBy))
                 throw new ArgumentException("Every island update requires human sign-off (§12.4.4).", nameof(approvedBy));
@@ -43,22 +61,26 @@ namespace DeterministicIsland.Islands
                         $"A new version must start after {current.Determinism.ValidFrom:O}; history is append-only.");
 
                 // Close the previous version so that the validity intervals partition time (§24.4.1).
-                versions[^1] = current with { Determinism = current.Determinism with { ValidTo = validFrom } };
+                var closed = current with { Determinism = current.Determinism with { ValidTo = validFrom } };
+                versions[^1] = closed;
+                _byId[closed.VectorId] = closed;
             }
 
             var vector = new ILMVector
             {
                 VectorId = Guid.NewGuid(),
-                Embedding = new[] { value },
+                Embedding = embedding,
                 Determinism = new DeterminismMetadata
                 {
-                    IsDeterministic = true,
+                    IsDeterministic = isDeterministic,
                     Version = $"v{versions.Count + 1}",
                     ValidFrom = validFrom,
-                    ApprovedBy = approvedBy
+                    ApprovedBy = approvedBy,
+                    PointerTo = pointerTo
                 }
             };
             versions.Add(vector);
+            _byId[vector.VectorId] = vector;
             return vector;
         }
 

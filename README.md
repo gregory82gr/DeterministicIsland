@@ -16,11 +16,12 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 
 * **Stochastic Core** (`MiniNeuralNetwork`): a small 2-4-1 perceptron that predicts the valve opening from temperature and pressure. Dropout stays active at inference, so two identical readings can produce two different commands (§12.2).
 * **Static Vault** (`StaticVault`, §12.3.1): every safety limit is a pre-verified, human-approved fact stored under `SHA-256(normalised query)`. The AI never produces these values. Updates are append-only (§12.4.4). An update closes the old version's `ValidTo` and registers a new version, so the question "what was the limit on date X?" always has exactly one answer.
+* **Intra-Vector Routing** (`VectorResolver`, `GuardedResolver`, §12.3.3): a vault entry can be a pointer (`PointerTo`) to another vector, for example a backup line that uses the primary line's setpoint. Resolution follows the chain. Cycles, chains longer than 8 hops and dangling pointers fail loudly. A pointer to a superseded version is stale and fails until a human re-registers it.
 * **Frozen Snapshot** (`FrozenSnapshotConfig`, §12.3.2): locks the weights hash, runtime version, random seed and CPU-only inference, which makes the same network bitwise reproducible.
 * **Shield** (`Shield`, §17.4): bounds every AI proposal with `min(proposed, maxSafe)` on every cycle, with `maxSafe` taken from the vault.
 * **Protection Islands** (`IslandCatalog`): sensor-triggered interlocks (pressure relief, radiation containment, thermal protection) that are evaluated on **every** cycle. Their thresholds and outputs come from the vault.
 * **Causality Lock** (`CausalityLock`, §12.3.3): engaged when the operator notes explicitly request a `"deterministic island"`. While it is engaged the command must come from an island or a Frozen Snapshot. Otherwise the Arbiter escalates to **Human-in-the-Loop** by throwing `DeterminismViolationException`. It never falls back silently to the stochastic core.
-* **System Arbiter** (`CompleteSystemArbiter`): orchestrates the above, resolves conflicts between islands, and writes every decision to the audit trail.
+* **System Arbiter** (`CompleteSystemArbiter`): `Execute` runs a control cycle. It orchestrates the above, resolves conflicts between islands, and writes every decision to the audit trail. `Answer` resolves a factual query as in §12.4.2: Static Vault first, then a candidate vector (e.g. from RAG), and only then the stochastic generator (it returns `null`). Under a Causality Lock it escalates instead of falling through.
 
 ### 🛡️ Conflict Resolution Matrix
 
@@ -31,7 +32,7 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 | **3. Human-in-the-Loop** | Causality Lock engaged, no deterministic answer | `DeterminismViolationException`: the AI command is not applied and the record is flagged `RequiresHumanReview`. |
 | **4. Auditable Boundary** | Every control cycle | One JSON line per decision in `nexus1-audit.jsonl`: reading, lock state, AI proposal, triggered islands with the vault entries and versions they used, and the final command. |
 
-> **Note on the book.** Rules 1 and 2 are an extension of this POC; they are not part of the book. The book (§12.4.3, p. 94) resolves conflicts with a fixed precedence between mechanisms (Static Vault → routed vector → Frozen Snapshot) and treats any disagreement between two deterministic sources as an error for human review. This is why the SCRAM record is flagged for review instead of being treated as settled. Intra-Vector Routing (§12.3.3) is not implemented in this POC.
+> **Note on the book.** Rules 1 and 2 are an extension of this POC; they are not part of the book. The book (§12.4.3, p. 94) resolves conflicts with a fixed precedence between mechanisms (Static Vault → routed vector → Frozen Snapshot) and treats any disagreement between two deterministic sources as an error for human review. This is why the SCRAM record is flagged for review instead of being treated as settled.
 
 ---
 
@@ -43,8 +44,8 @@ DeterministicIsland/
 ├── CompleteSystemArbiter.cs       # The Arbiter
 ├── domain/                        # SensorReading, ControlCommand, DynamicIsland, ILMVector
 ├── ProbabilisticCore/             # MiniNeuralNetwork (stochastic / frozen)
-├── Islands/                       # StaticVault, FrozenSnapshotConfig, Shield,
-│                                  # SafetyLimits, IslandCatalog, CausalityLock
+├── Islands/                       # StaticVault, VectorResolver, FrozenSnapshotConfig,
+│                                  # Shield, SafetyLimits, IslandCatalog, CausalityLock
 └── Audit/                         # AuditRecord, JSON Lines and in-memory audit logs
 DeterministicIsland.Tests/         # xUnit tests
 ```
@@ -59,7 +60,7 @@ DeterministicIsland.Tests/         # xUnit tests
 ### Execution Steps
 ```bash
 cd DeterministicIsland
-dotnet run          # runs the six scenarios and writes nexus1-audit.jsonl next to the binary
+dotnet run          # runs the seven scenarios and writes nexus1-audit.jsonl next to the binary
 cd ..
 dotnet test         # runs the xUnit test suite
 ```
@@ -74,6 +75,7 @@ dotnet test         # runs the xUnit test suite
 4. **Deadlock → SCRAM:** 8.5 bar and a radiation leak. Two `CriticalSafety` islands demand 100% and 0%. The Arbiter fires a **FAIL-SAFE EMERGENCY SCRAM** and flags the conflict for human review.
 5. **Causality Lock → Human-in-the-Loop:** the operator requests a "deterministic island", but no island applies and no Frozen Snapshot is configured. The Arbiter refuses to answer stochastically and escalates to a human.
 6. **Causality Lock → Frozen Snapshot:** the same request with a Frozen Snapshot core. The answer is bitwise identical on every repeat.
+7. **Intra-Vector Routing:** the backup line's relief setpoint is registered as a pointer to the primary line's setpoint and resolves deterministically to 8 bar. An ordinary RAG vector without a Determinism block is then rejected under the Causality Lock and escalated to a human.
 
 ---
 
