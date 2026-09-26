@@ -119,13 +119,66 @@ public sealed class IslandRepositoryTests : IDisposable
     public void RecordWithAnUnknownDerivationRule_IsRejected() =>
         AssertTamperedFileIsRejected(r => r with { DerivationRule = "average", DerivationInputs = new[] { "x" } });
 
+    // Writes an inconsistent record with a *valid* hash chain, so that the vault's own
+    // consistency checks, not the chain, are what must reject it.
     private void AssertTamperedFileIsRejected(Func<IslandRecord, IslandRecord> tamper)
     {
         OpenVault().Register("limit", 1.0, T1, "Engineer");
-        var record = JsonSerializer.Deserialize<IslandRecord>(File.ReadAllLines(_path)[0])!;
-        File.WriteAllText(_path, JsonSerializer.Serialize(tamper(record)) + Environment.NewLine);
+        var record = new JsonLinesIslandRepository(_path).GetAll().Single();
+        File.Delete(_path);
+        new JsonLinesIslandRepository(_path).Save(tamper(record));
 
-        Assert.Throws<InvalidDataException>(() => OpenVault());
+        var ex = Assert.Throws<InvalidDataException>(() => OpenVault());
+        Assert.Contains("cannot be restored", ex.Message);
+    }
+
+    [Fact]
+    public void EditedValueInTheFile_BreaksTheHashChain()
+    {
+        OpenVault().Register("limit", 8.0, T1, "Engineer");
+        File.WriteAllText(_path, File.ReadAllText(_path).Replace("[8]", "[9]"));
+
+        var ex = Assert.Throws<InvalidDataException>(() => OpenVault());
+        Assert.Contains("line 1: hash mismatch", ex.Message);
+    }
+
+    [Fact]
+    public void RemovedLine_BreaksTheHashChain()
+    {
+        var vault = OpenVault();
+        vault.Register("a", 1.0, T1, "Engineer");
+        vault.Register("b", 2.0, T1, "Engineer");
+        vault.Register("c", 3.0, T1, "Engineer");
+        var lines = File.ReadAllLines(_path);
+        File.WriteAllLines(_path, new[] { lines[0], lines[2] });
+
+        var ex = Assert.Throws<InvalidDataException>(() => OpenVault());
+        Assert.Contains("line 2: hash chain broken", ex.Message);
+    }
+
+    [Fact]
+    public void ReorderedLines_BreakTheHashChain()
+    {
+        var vault = OpenVault();
+        vault.Register("a", 1.0, T1, "Engineer");
+        vault.Register("b", 2.0, T1, "Engineer");
+        var lines = File.ReadAllLines(_path);
+        File.WriteAllLines(_path, new[] { lines[1], lines[0] });
+
+        var ex = Assert.Throws<InvalidDataException>(() => OpenVault());
+        Assert.Contains("line 1: hash chain broken", ex.Message);
+    }
+
+    [Fact]
+    public void ChainContinuesAcrossReopenedRepositories()
+    {
+        OpenVault().Register("a", 1.0, T1, "Engineer");
+        OpenVault().Register("b", 2.0, T1, "Engineer");
+
+        var lines = File.ReadAllLines(_path).Select(l => JsonDocument.Parse(l).RootElement).ToList();
+        Assert.Equal(JsonLinesIslandRepository.GenesisHash, lines[0].GetProperty("PreviousHash").GetString());
+        Assert.Equal(lines[0].GetProperty("Hash").GetString(), lines[1].GetProperty("PreviousHash").GetString());
+        Assert.Equal(2, OpenVault().VersionCount);
     }
 
     private sealed class VectorComparer : IEqualityComparer<ILMVector>
