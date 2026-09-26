@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace DeterministicIsland.domain
 {
     // Ch. 10 / §12.3.1: every vector that takes part in a Deterministic Island carries a
@@ -36,6 +38,17 @@ namespace DeterministicIsland.domain
 
         public DeterminismMetadata? Determinism { get; init; }
 
+        // Derived from Embedding, so it is not serialized; a pointer has no value of its own.
+        [JsonIgnore]
         public double Value => Embedding[0];
+    }
+
+    // A vault query together with the vector it resolved to: the provenance of a decision.
+    public sealed record VaultFact(string Query, ILMVector Vector)
+    {
+        public string Describe() =>
+            $"{Query} = {Vector.Value} ({Vector.Determinism!.Version}" +
+            (Vector.Determinism.DerivedBy is { } rule ? $", derived: {rule} of {Vector.Determinism.DerivedFrom!.Count} inputs" : "") +
+            $", approved by {Vector.Determinism.ApprovedBy})";
     }
 }
