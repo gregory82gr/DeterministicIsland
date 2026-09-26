@@ -3,7 +3,8 @@
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![Language](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/dotnet/csharp/)
 ![Architecture](https://img.shields.io/badge/architecture-DDD-1d4e89)
-[![Guide](https://img.shields.io/badge/guide-PDF%2C%2057%20pages-b83280)](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf)
+[![Guide](https://img.shields.io/badge/guide-PDF%2C%2058%20pages-b83280)](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f855a)](LICENSE)
 
 A Proof of Concept (POC) demonstrating the **Deterministic Islands** and **System Arbiter** architecture described in the *NEXUS-1 Engineering Series* by **Grigorios Agathangelidis**. 
 
@@ -11,7 +12,7 @@ This repository implements a hybrid control system designed for critical industr
 
 > 🕹️ **Where it all started:** [NEXUS-1 Phase 0](https://gregory82gr.github.io/Nexus-1-phase-0/) is the interactive console for the educational nuclear-plant digital twin that the whole NEXUS-1 series grew from.
 
-> 📘 **New to the field? Start with the guide.** [*Deterministic Islands in Practice — An Engineer-to-Engineer Guide*](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) (PDF, 57 pages) explains the POC step by step as architecture rather than C#. It covers the neural core computed by hand, dropout and MC Dropout, the Static Vault, versions, pointers, derived islands, the Arbiter, the Causality Lock, operator override and the trust infrastructure. It also sets out the approach this POC took beyond the book and ends with graded exercises. See [Documentation](#-documentation).
+> 📘 **New to the field? Start with the guide.** [*Deterministic Islands in Practice — An Engineer-to-Engineer Guide*](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) (PDF, 58 pages) explains the POC step by step as architecture rather than C#. It covers the neural core computed by hand, dropout and MC Dropout, the Static Vault, versions, pointers, derived islands, the Arbiter, the Causality Lock, operator override and the trust infrastructure. It also sets out the approach this POC took beyond the book and ends with graded exercises. See [Documentation](#-documentation).
 
 ---
 
@@ -79,6 +80,8 @@ DeterministicIsland/
 DeterministicIsland.Api/          # Web API (§23.5): NexusRuntime (application layer) + endpoints
 DeterministicIsland.Tests/         # xUnit tests, including API tests with WebApplicationFactory
 docs/                              # Engineer-to-engineer guide (PDF) and the source that generates it
+LICENSE                            # MIT
+Directory.Build.props              # Shared authors / copyright / licence metadata for all projects
 ```
 
 ---
@@ -142,7 +145,7 @@ The API deliberately has **no endpoint that writes safety limits**. The book (§
 
 | Document | What it is |
 | :--- | :--- |
-| [`docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf`](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) | **Deterministic Islands in Practice**: a 57-page engineer-to-engineer guide in six parts: orientation, the stochastic core, Deterministic Islands, trust infrastructure, our approach, hands-on. |
+| [`docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf`](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) | **Deterministic Islands in Practice**: a 58-page engineer-to-engineer guide in six parts: orientation, the stochastic core, Deterministic Islands, trust infrastructure, our approach, hands-on. |
 | [`docs/source/`](docs/source) | The Python source that generates the guide. Its network mirrors `MiniNeuralNetwork.cs` exactly, so every number and chart in the guide is computed, not typed. |
 
 The guide suggests three reading paths:
@@ -197,6 +200,20 @@ The NEXUS-1 series by **Grigorios Agathangelidis** now counts **22 books**. It b
 
 Books that connect directly to this POC: *From Flood to Cause* and *From Trial to Policy* (the same idea of a deterministic core with an explaining or learning component around it), *From Domain to Twin* and *From Blueprint to Core* (the DDD and layering used here), *From Flow to Proof* (turning the Neural Constitution's promises into proofs), and *From Certainty to Calibration* (the same habit as this POC's Part V: revisiting one's own decisions).
 
+
+---
+
+## 📄 License
+
+This repository is released under the **[MIT License](LICENSE)**, Copyright (c) 2026 Grigorios Agathangelidis. You may use, copy, modify and distribute it, commercially or not, provided the copyright notice and the licence text are kept in all copies or substantial portions.
+
+**What the MIT License covers:** everything in this repository, including the source code, tests, Web API, demo, the engineer guide in [`docs/`](docs) and the Python source that generates it.
+
+**What it does not cover:**
+- **The NEXUS-1 books themselves**, including *From Stochastic Chaos to Deterministic Certainty*. They are separate works, © Grigorios Agathangelidis, all rights reserved, and are not included in this repository. The code and the guide only refer to them by chapter and section, with short quotations for commentary. To read them, see [The author's books](#%EF%B8%8F-the-authors-books).
+- **Third-party components**, which keep their own licences. The NuGet packages restored at build time (for example xUnit and Microsoft.AspNetCore.Mvc.Testing) are not part of this repository. The guide PDF embeds subsets of the DejaVu fonts, whose free licence permits embedding.
+
+**No warranty, and not for safety use.** As the licence states, the software is provided "as is", without warranty of any kind. In addition, see the disclaimer below: this is an educational proof of concept and must not be used to operate or make safety decisions in real facilities.
 
 ---
 *Disclaimer: This codebase is a theoretical architectural companion to the NEXUS-1 project. It is intended strictly for educational and modeling demonstrations. It should not be used to operate or make automated safety decisions in real nuclear or critical industrial facilities.*
