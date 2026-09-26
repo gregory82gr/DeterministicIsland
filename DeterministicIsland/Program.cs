@@ -8,7 +8,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 7 ARCHITECTURAL SCENARIOS ===");
+        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 8 ARCHITECTURAL SCENARIOS ===");
         var vault = new StaticVault();
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
         var auditLog = new JsonLinesAuditLog(Path.Combine(AppContext.BaseDirectory, "nexus1-audit.jsonl"));
@@ -95,6 +95,18 @@ class Program
             Console.WriteLine($"[HUMAN-IN-THE-LOOP] {ex.Message}");
             Console.ResetColor();
         }
+
+        // -------------------------------------------------------------------
+        // Σενάριο 8: Παράγωγη νησίδα -> το όριο εκτόνωσης = min(PT-1, PT-2, PT-3)
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 8: Derived Island (Relief Setpoint = Minimum of Three Transmitters) ---");
+        var r8 = new SensorReading(TemperatureCelsius: 60.0, PressureBar: 7.8, "Routine check.", RadiationLeakDetected: false);
+        Console.WriteLine($"[DERIVED] {SafetyLimits.Describe(SafetyLimits.PressureReliefSetpointBar, vault.Resolve(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow))}");
+
+        // Η PT-2 επαναβαθμονομείται στα 7.6 bar: η παράγωγη νησίδα υπολογίζεται ξανά αυτόματα.
+        vault.Register(SafetyLimits.PressureTransmitterLimitsBar[1], 7.6, DateTime.UtcNow, approvedBy: "Instrumentation Engineer");
+        Console.WriteLine($"[DERIVED] {SafetyLimits.Describe(SafetyLimits.PressureReliefSetpointBar, vault.Resolve(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow))}");
+        arbiter.Execute(r8);
 
         Console.WriteLine($"\n[AUDIT TRAIL] Every control decision above was appended to {auditLog.Path}");
         Console.WriteLine("=================================================================");
