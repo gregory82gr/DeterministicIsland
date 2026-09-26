@@ -9,45 +9,34 @@ namespace DeterministicIsland.Islands
     {
         public static List<DynamicIsland> Build(StaticVault vault, DateTime asOf)
         {
-            var reliefSetpoint = SafetyLimits.Require(vault, SafetyLimits.PressureReliefSetpointBar, asOf);
-            var reliefOpening = SafetyLimits.Require(vault, SafetyLimits.PressureReliefValveOpening, asOf);
-            var tempLimit = SafetyLimits.Require(vault, SafetyLimits.CoolantTemperatureLimitCelsius, asOf);
-            var coolingOpening = SafetyLimits.Require(vault, SafetyLimits.StructuralCoolingValveOpening, asOf);
-            var containmentOpening = SafetyLimits.Require(vault, SafetyLimits.RadiationContainmentValveOpening, asOf);
+            var reliefSetpoint = SafetyLimits.RequireFact(vault, SafetyLimits.PressureReliefSetpointBar, asOf);
+            var reliefOpening = SafetyLimits.RequireFact(vault, SafetyLimits.PressureReliefValveOpening, asOf);
+            var tempLimit = SafetyLimits.RequireFact(vault, SafetyLimits.CoolantTemperatureLimitCelsius, asOf);
+            var coolingOpening = SafetyLimits.RequireFact(vault, SafetyLimits.StructuralCoolingValveOpening, asOf);
+            var containmentOpening = SafetyLimits.RequireFact(vault, SafetyLimits.RadiationContainmentValveOpening, asOf);
 
             return new List<DynamicIsland>
             {
                 // Κρίσιμη Ασφάλεια Πίεσης: ζητά άνοιγμα βαλβίδας εκτόνωσης.
                 new(Name: "High Pressure Emergency Loop",
                     Priority: IslandPriority.CriticalSafety,
-                    Condition: r => r.PressureBar >= reliefSetpoint.Value,
-                    EnforcedOutput: reliefOpening.Value,
-                    Sources: new[]
-                    {
-                        SafetyLimits.Describe(SafetyLimits.PressureReliefSetpointBar, reliefSetpoint),
-                        SafetyLimits.Describe(SafetyLimits.PressureReliefValveOpening, reliefOpening)
-                    }),
+                    Condition: r => r.PressureBar >= reliefSetpoint.Vector.Value,
+                    EnforcedOutput: reliefOpening.Vector.Value,
+                    Facts: new[] { reliefSetpoint, reliefOpening }),
 
                 // Κρίσιμη Ασφάλεια Διαρροής: κλείνει τη βαλβίδα για να εγκλωβίσει τη ραδιενέργεια.
                 new(Name: "Radiation Leak Containment Boundary",
                     Priority: IslandPriority.CriticalSafety,
                     Condition: r => r.RadiationLeakDetected,
-                    EnforcedOutput: containmentOpening.Value,
-                    Sources: new[]
-                    {
-                        SafetyLimits.Describe(SafetyLimits.RadiationContainmentValveOpening, containmentOpening)
-                    }),
+                    EnforcedOutput: containmentOpening.Vector.Value,
+                    Facts: new[] { containmentOpening }),
 
                 // Δομική προστασία: ψύξη όταν η θερμοκρασία ξεπερνά το όριο.
                 new(Name: "Structural Thermal Protection",
                     Priority: IslandPriority.Structural,
-                    Condition: r => r.TemperatureCelsius >= tempLimit.Value,
-                    EnforcedOutput: coolingOpening.Value,
-                    Sources: new[]
-                    {
-                        SafetyLimits.Describe(SafetyLimits.CoolantTemperatureLimitCelsius, tempLimit),
-                        SafetyLimits.Describe(SafetyLimits.StructuralCoolingValveOpening, coolingOpening)
-                    })
+                    Condition: r => r.TemperatureCelsius >= tempLimit.Vector.Value,
+                    EnforcedOutput: coolingOpening.Vector.Value,
+                    Facts: new[] { tempLimit, coolingOpening })
             };
         }
 

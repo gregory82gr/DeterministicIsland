@@ -43,9 +43,8 @@ namespace DeterministicIsland.Islands
         // currently valid vector.
         public static ILMVector Require(StaticVault vault, string query, DateTime asOf) => vault.Resolve(query, asOf);
 
-        public static string Describe(string query, ILMVector vector) =>
-            $"{query} = {vector.Value} ({vector.Determinism!.Version}" +
-            (vector.Determinism.DerivedBy is { } rule ? $", derived: {rule} of {vector.Determinism.DerivedFrom!.Count} inputs" : "") +
-            $", approved by {vector.Determinism.ApprovedBy})";
+        public static VaultFact RequireFact(StaticVault vault, string query, DateTime asOf) => new(query, Require(vault, query, asOf));
+
+        public static string Describe(string query, ILMVector vector) => new VaultFact(query, vector).Describe();
     }
 }
