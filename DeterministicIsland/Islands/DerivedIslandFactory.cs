@@ -6,6 +6,6 @@ namespace DeterministicIsland.Islands
     {
         public static void DeriveMinimum(StaticVault vault, string derivedQuery, DateTime validFrom, string approvedBy,
             params string[] inputQueries) =>
-            vault.RegisterDerived(derivedQuery, inputQueries, "minimum", values => values.Min(), validFrom, approvedBy);
+            vault.RegisterDerived(derivedQuery, inputQueries, "minimum", validFrom, approvedBy);
     }
 }

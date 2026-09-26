@@ -10,6 +10,8 @@ public class DerivedIslandTests
     private static readonly DateTime T1 = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime T2 = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
+    private static double Difference(IReadOnlyList<double> values) => values[0] - values[1];
+
     private static StaticVault VaultWithThreeSensors()
     {
         var vault = new StaticVault();
@@ -51,7 +53,8 @@ public class DerivedIslandTests
     {
         var vault = VaultWithThreeSensors();
         vault.Register("margin", 2.0, T1, "Engineer");
-        vault.RegisterDerived("alarm limit", new[] { "system limit", "margin" }, "difference", v => v[0] - v[1], T1, "Engineer");
+        DerivationRules.Register("difference", Difference);
+        vault.RegisterDerived("alarm limit", new[] { "system limit", "margin" }, "difference", T1, "Engineer");
 
         vault.Register("pt-2 limit", 41.0, T2, "Engineer");
 
