@@ -15,13 +15,19 @@ namespace DeterministicIsland
     public class CompleteSystemArbiter
     {
         private readonly MiniNeuralNetwork _aiCore;
+        private readonly MiniNeuralNetwork? _frozenSnapshot;
         private readonly StaticVault _vault;
         private readonly Shield _shield;
         private readonly Func<DateTime> _clock;
 
-        public CompleteSystemArbiter(MiniNeuralNetwork aiCore, StaticVault vault, Func<DateTime>? clock = null)
+        public CompleteSystemArbiter(MiniNeuralNetwork aiCore, StaticVault vault, Func<DateTime>? clock = null,
+            MiniNeuralNetwork? frozenSnapshot = null)
         {
+            if (frozenSnapshot is { IsFrozen: false })
+                throw new ArgumentException("The frozen snapshot core must be created with a FrozenSnapshotConfig.", nameof(frozenSnapshot));
+
             _aiCore = aiCore;
+            _frozenSnapshot = frozenSnapshot;
             _vault = vault;
             _shield = new Shield(vault);
             _clock = clock ?? (() => DateTime.UtcNow);
@@ -30,14 +36,33 @@ namespace DeterministicIsland
         public ControlCommand Execute(SensorReading reading)
         {
             DateTime now = _clock();
-            ControlCommand aiProposal = _aiCore.Predict(reading);
+            var causalityLock = new CausalityLock();
+            if (CausalityLock.IsRequestedBy(reading.OperatorNotes))
+                causalityLock.Engage();
 
             // Οι νησίδες αξιολογούνται σε κάθε κύκλο, όχι μόνο όταν το ζητήσει ο χειριστής (§17.6).
             List<DynamicIsland> activeIslands = IslandCatalog.Triggered(reading, _vault, now);
 
             if (!activeIslands.Any())
             {
+                // Χωρίς νησίδα, με ενεργό Causality Lock: μόνο το Frozen Snapshot είναι αποδεκτό (§12.4.3).
+                // Αν δεν υπάρχει, κλιμάκωση σε άνθρωπο, ποτέ σιωπηλή επιστροφή στο στοχαστικό AI.
+                MiniNeuralNetwork core = _aiCore;
+                if (causalityLock.IsEngaged)
+                {
+                    if (_frozenSnapshot is null)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Magenta;
+                        Console.WriteLine("[HUMAN-IN-THE-LOOP] Causality Lock engaged, but no deterministic mechanism resolved this reading.");
+                        Console.ResetColor();
+                        throw new DeterminismViolationException(
+                            "No deterministic mechanism resolved this reading, but a Causality Lock is engaged.");
+                    }
+                    core = _frozenSnapshot;
+                }
+
                 // Ακόμη και χωρίς νησίδα, η πρόταση του AI περνά από το Shield (§17.4).
+                ControlCommand aiProposal = core.Predict(reading);
                 ControlCommand shielded = _shield.Enforce(aiProposal, now);
                 Console.ForegroundColor = shielded == aiProposal ? ConsoleColor.Green : ConsoleColor.Yellow;
                 Console.WriteLine($"[INFO] Safe Zone: No islands triggered. Executing: {shielded.Origin} -> {shielded.ValveOpeningTarget:P1}");
