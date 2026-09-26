@@ -12,73 +12,74 @@ This repository implements a hybrid control system designed for critical industr
 
 ## 🏗️ Architectural Overview
 
-The system establishes a **"Probabilistic Core, Deterministic Shell"** topology using Domain-Driven Design (DDD):
+The system establishes a **"Probabilistic Core, Deterministic Shell"** topology using Domain-Driven Design (DDD). Section numbers refer to the book listed under *Bibliography*.
 
-* **Stochastic Core Layer:** A lightweight, pure C# neural network (`MiniNeuralNetwork`) that predicts the required valve opening based on input telemetry. It represents the flexible but inherently unpredictable AI component.
-* **Dynamic Deterministic Islands:** Safety boundaries that are instantiated **on-demand (runtime context isolation)** when specific keywords (`"deterministic island"`, `"retrieve"`) are detected in the operator notes.
-* **System Arbiter:** The central orchestrator that intercepts AI predictions, maps active deterministic constraints, and handles **Conflict Resolution** based on strict priority rings.
+* **Stochastic Core** (`MiniNeuralNetwork`): a small 2-4-1 perceptron that predicts the valve opening from temperature and pressure. Dropout stays active at inference, so two identical readings can produce two different commands (§12.2).
+* **Static Vault** (`StaticVault`, §12.3.1): every safety limit is a pre-verified, human-approved fact stored under `SHA-256(normalised query)`. The AI never produces these values. Updates are append-only (§12.4.4). An update closes the old version's `ValidTo` and registers a new version, so the question "what was the limit on date X?" always has exactly one answer.
+* **Frozen Snapshot** (`FrozenSnapshotConfig`, §12.3.2): locks the weights hash, runtime version, random seed and CPU-only inference, which makes the same network bitwise reproducible.
+* **Shield** (`Shield`, §17.4): bounds every AI proposal with `min(proposed, maxSafe)` on every cycle, with `maxSafe` taken from the vault.
+* **Protection Islands** (`IslandCatalog`): sensor-triggered interlocks (pressure relief, radiation containment, thermal protection) that are evaluated on **every** cycle. Their thresholds and outputs come from the vault.
+* **Causality Lock** (`CausalityLock`, §12.3.3): engaged when the operator notes explicitly request a `"deterministic island"`. While it is engaged the command must come from an island or a Frozen Snapshot. Otherwise the Arbiter escalates to **Human-in-the-Loop** by throwing `DeterminismViolationException`. It never falls back silently to the stochastic core.
+* **System Arbiter** (`CompleteSystemArbiter`): orchestrates the above, resolves conflicts between islands, and writes every decision to the audit trail.
 
 ### 🛡️ Conflict Resolution Matrix
 
-When multiple deterministic boundaries trigger simultaneously, the Arbiter handles the conflict through the following hierarchy:
-
 | Strategy | Condition | Action |
 | :--- | :--- | :--- |
-| **1. Priority Ring** | Disagreement between islands of *different* priorities | The island with the higher priority ring (`CriticalSafety > Structural > Operational`) takes absolute control. |
-| **2. Fail-Safe SCRAM** | Disagreement between islands of the *same* priority | The Arbiter declares a structural deadlock and triggers an immediate **Emergency SCRAM procedure** (Valve to 0%, system shutdown). |
-| **3. Auditable Boundary** | Any override or SCRAM event | The runtime parameters are frozen and serialized into system logs for absolute transparency. |
+| **1. Priority Ring** | Islands of *different* priorities triggered | The island with the higher ring (`CriticalSafety > Structural > Operational`) takes control. |
+| **2. Fail-Safe SCRAM** | Islands of the *same* priority with conflicting demands | Immediate **Emergency SCRAM** (valve to 0%). The audit record is flagged `RequiresHumanReview`. |
+| **3. Human-in-the-Loop** | Causality Lock engaged, no deterministic answer | `DeterminismViolationException`: the AI command is not applied and the record is flagged `RequiresHumanReview`. |
+| **4. Auditable Boundary** | Every control cycle | One JSON line per decision in `nexus1-audit.jsonl`: reading, lock state, AI proposal, triggered islands with the vault entries and versions they used, and the final command. |
+
+> **Note on the book.** Rules 1 and 2 are an extension of this POC; they are not part of the book. The book (§12.4.3, p. 94) resolves conflicts with a fixed precedence between mechanisms (Static Vault → routed vector → Frozen Snapshot) and treats any disagreement between two deterministic sources as an error for human review. This is why the SCRAM record is flagged for review instead of being treated as settled. Intra-Vector Routing (§12.3.3) is not implemented in this POC.
 
 ---
 
 ## 💻 Code Structure
 
-* `SensorReading`: Strongly-typed input domain model capturing telemetry (Temperature, Pressure, Radiation leak status, and Operator text notes).
-* `ControlCommand`: Immutable Value Object enforcing data boundaries (clamping the valve opening target between `0.0` and `1.0`).
-* `DynamicIsland`: Runtime-isolated boundary carrying a strict `IslandPriority` ring and an enforced mathematical output.
-* `CompleteSystemArbiter`: The central evaluation engine enforcing the structural boundary rules.
+```
+DeterministicIsland/
+├── Program.cs                     # Six demonstration scenarios
+├── CompleteSystemArbiter.cs       # The Arbiter
+├── domain/                        # SensorReading, ControlCommand, DynamicIsland, ILMVector
+├── ProbabilisticCore/             # MiniNeuralNetwork (stochastic / frozen)
+├── Islands/                       # StaticVault, FrozenSnapshotConfig, Shield,
+│                                  # SafetyLimits, IslandCatalog, CausalityLock
+└── Audit/                         # AuditRecord, JSON Lines and in-memory audit logs
+DeterministicIsland.Tests/         # xUnit tests
+```
 
 ---
 
 ## 🚀 Running the POC
 
 ### Prerequisites
-* [.NET 8.0 SDK](https://microsoft.comdownload/dotnet/8.0) or newer installed on your machine.
+* [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or newer (the projects target `net8.0`, as in Appendix A.7 of the book).
 
 ### Execution Steps
-1. Clone this repository or copy the source code into a local directory.
-2. Open your terminal and navigate to the project directory:
-   ```bash
-   cd Nexus1.CompletePOC
-   ```
-3. Run the console application:
-   ```bash
-   dotnet run
-   ```
+```bash
+cd DeterministicIsland
+dotnet run          # runs the six scenarios and writes nexus1-audit.jsonl next to the binary
+cd ..
+dotnet test         # runs the xUnit test suite
+```
 
 ---
 
-## 🔬 Test Suite Scenarios
+## 🔬 Demonstration Scenarios
 
-The codebase includes an automated suite of four real-world telemetry scenarios:
-
-1. **Scenario 1: Normal Operation (No Keywords)**
-   * *Conditions:* High temperature and pressure, but no context-isolation keywords used.
-   * *Result:* The AI Core runs freely without restrictions; its command is approved by the Arbiter.
-2. **Scenario 2: Dynamic Activation via 'retrieve'**
-   * *Conditions:* High temperature, notes include `"retrieve"`.
-   * *Result:* Spawns a `Structural` protection island dynamically. The Arbiter overrides the AI to enforce safe cooling.
-3. **Scenario 3: Standard Priority Resolution**
-   * *Conditions:* High temperature AND high pressure, notes include `"deterministic island"`.
-   * *Result:* Spawns both `Structural` and `CriticalSafety` islands. The Arbiter grants control to the Pressure loop (`CriticalSafety` beats `Structural`).
-4. **Scenario 4: The Ultimate Deadlock (SCRAM)**
-   * *Conditions:* High pressure (demands 100% opening) AND a Radiation Leak occurs (demands 0% closing), notes include `"retrieve"`.
-   * *Result:* Both loops share an identical `CriticalSafety` priority but carry contradicting demands. The Arbiter fires an immediate **FAIL-SAFE EMERGENCY SCRAM** to halt the process safely.
+1. **Normal Operation:** 60 °C, 5 bar. No island is triggered. The AI decides, but its command is capped at the vault's 75% limit by the Shield.
+2. **High Temperature:** 95 °C, 4 bar. The `Structural` thermal island overrides the AI and sets the cooling opening to 60%.
+3. **Priority Resolution:** 95 °C, 8.5 bar. The `Structural` and `CriticalSafety` islands both trigger. The pressure-relief island wins and opens the valve to 100%.
+4. **Deadlock → SCRAM:** 8.5 bar and a radiation leak. Two `CriticalSafety` islands demand 100% and 0%. The Arbiter fires a **FAIL-SAFE EMERGENCY SCRAM** and flags the conflict for human review.
+5. **Causality Lock → Human-in-the-Loop:** the operator requests a "deterministic island", but no island applies and no Frozen Snapshot is configured. The Arbiter refuses to answer stochastically and escalates to a human.
+6. **Causality Lock → Frozen Snapshot:** the same request with a Frozen Snapshot core. The answer is bitwise identical on every repeat.
 
 ---
 
 ## 📖 Bibliography & References
-* Agathangelidis, G., *From Core to Quantum: Quantum Mechanics and the Nucleus, for the Engineer Who Will Model Them*, NEXUS-1 Series, First Edition, September 2026.
-* Agathangelidis, G., *From Stochastic Chaos to Deterministic Certainty: AI for Critical Industrial Infrastructure*, NEXUS-1 Series, 2026.
+* Agathangelidis, G., *From Stochastic Chaos to Deterministic Certainty: AI for Critical Industrial Infrastructure*, NEXUS-1 Engineering Series, September 2026 — the book this POC is based on ([`From_Stochastic_Chaos_to_Deterministic_Certainty.pdf`](From_Stochastic_Chaos_to_Deterministic_Certainty.pdf)). Relevant chapters: 12 (Deterministic Islands), 17.4 (Safe RL: Shielding), 22 (Bounding the AI Context), 24 (Deterministic Islands — Deep Dive).
+* Agathangelidis, G., *From Core to Quantum: Quantum Mechanics and the Nucleus, for the Engineer Who Will Model Them*, NEXUS-1 Series, First Edition, September 2026 — the preceding volume of the series.
 
 ---
 *Disclaimer: This codebase is a theoretical architectural companion to the NEXUS-1 project. It is intended strictly for educational and modeling demonstrations. It should not be used to operate or make automated safety decisions in real nuclear or critical industrial facilities.*
