@@ -45,7 +45,8 @@ namespace DeterministicIsland
 
             if (topTierIslands.Count > 1 && hasConflictingDemands)
             {
-                // Στρατηγική Fail-Safe / SCRAM (Page 94)
+                // Στρατηγική Fail-Safe / SCRAM: επέκταση του POC, όχι κανόνας του βιβλίου.
+                // Το βιβλίο (§12.4.3, σελ. 94) ζητά η διαφωνία να καταγράφεται για ανθρώπινο έλεγχο.
                 Console.ForegroundColor = ConsoleColor.DarkRed;
                 Console.WriteLine($"\n[FATAL DEADLOCK] Multiple islands triggered at the SAME priority level ({topTierIslands.First().Priority}) with conflicting demands!");
                 foreach (var island in topTierIslands)

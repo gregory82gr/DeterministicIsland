@@ -26,7 +26,9 @@ When multiple deterministic boundaries trigger simultaneously, the Arbiter handl
 | :--- | :--- | :--- |
 | **1. Priority Ring** | Disagreement between islands of *different* priorities | The island with the higher priority ring (`CriticalSafety > Structural > Operational`) takes absolute control. |
 | **2. Fail-Safe SCRAM** | Disagreement between islands of the *same* priority | The Arbiter declares a structural deadlock and triggers an immediate **Emergency SCRAM procedure** (Valve to 0%, system shutdown). |
-| **3. Auditable Boundary** | Any override or SCRAM event | The runtime parameters are frozen and serialized into system logs for absolute transparency. |
+| **3. Auditable Boundary** | Any override or SCRAM event | The decision and the islands involved are written to the console output. |
+
+> **Note on the book.** The priority rings and the SCRAM-on-deadlock rule are an extension of this POC; they are not part of the book. The book (§12.4.3, p. 94) resolves conflicts with a fixed precedence between mechanisms (Static Vault → routed vector → Frozen Snapshot) and treats any disagreement between two deterministic sources as an error that must be logged for human review — never adjudicated silently by the Arbiter.
 
 ---
 
@@ -42,13 +44,13 @@ When multiple deterministic boundaries trigger simultaneously, the Arbiter handl
 ## 🚀 Running the POC
 
 ### Prerequisites
-* [.NET 8.0 SDK](https://microsoft.comdownload/dotnet/8.0) or newer installed on your machine.
+* [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or newer installed on your machine (the project targets `net8.0`, as in Appendix A.7 of the book).
 
 ### Execution Steps
 1. Clone this repository or copy the source code into a local directory.
 2. Open your terminal and navigate to the project directory:
    ```bash
-   cd Nexus1.CompletePOC
+   cd DeterministicIsland
    ```
 3. Run the console application:
    ```bash
@@ -64,12 +66,12 @@ The codebase includes an automated suite of four real-world telemetry scenarios:
 1. **Scenario 1: Normal Operation (No Keywords)**
    * *Conditions:* High temperature and pressure, but no context-isolation keywords used.
    * *Result:* The AI Core runs freely without restrictions; its command is approved by the Arbiter.
-2. **Scenario 2: Dynamic Activation via 'retrieve'**
-   * *Conditions:* High temperature, notes include `"retrieve"`.
-   * *Result:* Spawns a `Structural` protection island dynamically. The Arbiter overrides the AI to enforce safe cooling.
-3. **Scenario 3: Standard Priority Resolution**
+2. **Scenario 2: Keyword Without a Triggered Island**
+   * *Conditions:* High temperature, normal pressure, notes include `"retrieve"`.
+   * *Result:* No island condition is met (there is no temperature island yet), so the AI command is executed.
+3. **Scenario 3: Single Critical Island Override**
    * *Conditions:* High temperature AND high pressure, notes include `"deterministic island"`.
-   * *Result:* Spawns both `Structural` and `CriticalSafety` islands. The Arbiter grants control to the Pressure loop (`CriticalSafety` beats `Structural`).
+   * *Result:* Only the `CriticalSafety` pressure island is triggered; the Arbiter overrides the AI and opens the relief valve to 100%.
 4. **Scenario 4: The Ultimate Deadlock (SCRAM)**
    * *Conditions:* High pressure (demands 100% opening) AND a Radiation Leak occurs (demands 0% closing), notes include `"retrieve"`.
    * *Result:* Both loops share an identical `CriticalSafety` priority but carry contradicting demands. The Arbiter fires an immediate **FAIL-SAFE EMERGENCY SCRAM** to halt the process safely.
@@ -77,7 +79,8 @@ The codebase includes an automated suite of four real-world telemetry scenarios:
 ---
 
 ## 📖 Bibliography & References
-* Agathangelidis, G., *From Core to Quantum: Quantum Mechanics and the Nucleus, for the Engineer Who Will Model Them*, NEXUS-1 Series, First Edition, September 2026.
+* Agathangelidis, G., *From Stochastic Chaos to Deterministic Certainty: AI for Critical Industrial Infrastructure*, NEXUS-1 Engineering Series, September 2026 — the book this POC is based on ([`From_Stochastic_Chaos_to_Deterministic_Certainty.pdf`](From_Stochastic_Chaos_to_Deterministic_Certainty.pdf)). Relevant chapters: 12 (Deterministic Islands), 17.4 (Safe RL: Shielding), 22 (Bounding the AI Context), 24 (Deterministic Islands — Deep Dive).
+* Agathangelidis, G., *From Core to Quantum: Quantum Mechanics and the Nucleus, for the Engineer Who Will Model Them*, NEXUS-1 Series, First Edition, September 2026 — the preceding volume of the series.
 * Agathangelidis, G., *From Stochastic Chaos to Deterministic Certainty: AI for Critical Industrial Infrastructure*, NEXUS-1 Series, 2026.
 
 ---
