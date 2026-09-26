@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace DeterministicIsland.Audit
 {
-    public enum ArbiterDecision { AiApproved, AiShielded, IslandOverride, Scram, HumanEscalation }
+    public enum ArbiterDecision { AiApproved, AiShielded, IslandOverride, Scram, HumanEscalation, OperatorOverride }
 
     public sealed record IslandSnapshot(string Name, IslandPriority Priority, double EnforcedOutput, IReadOnlyList<string> Sources);
 
@@ -29,6 +29,9 @@ namespace DeterministicIsland.Audit
         // could not answer deterministically, must be reviewed by a human.
         public required bool RequiresHumanReview { get; init; }
         public string? Reason { get; init; }
+
+        // The operator command given in this cycle, applied or not.
+        public OperatorOverride? Operator { get; init; }
     }
 
     public interface IAuditLog
