@@ -53,13 +53,15 @@ namespace DeterministicIsland.Governance
 
             new ConstitutionalRule(
                 "Every registered fact's provenance and approval are permanently recorded.",
-                "Append-only update discipline (§12.4.4): versions are closed, never edited, and each names its approver.",
+                "Append-only update discipline (§12.4.4): versions are closed, never edited, and each names its approver; every version is saved to an append-only repository before it takes effect (§23.2).",
                 RuleSource.Book,
                 new[]
                 {
                     "StaticVaultTests.Register_UpdateIsAppendOnlyAndKeepsHistoryQueryable",
                     "StaticVaultTests.Register_RequiresHumanSignOff",
-                    "DerivedIslandTests.InputUpdate_RecomputesTheDerivedIslandAutomatically"
+                    "DerivedIslandTests.InputUpdate_RecomputesTheDerivedIslandAutomatically",
+                    "IslandRepositoryTests.ReopenedVault_HasTheSameVersionsPointersAndDerivedIslands",
+                    "IslandRepositoryTests.FailedSave_LeavesTheVaultUnchanged"
                 }),
 
             new ConstitutionalRule(
