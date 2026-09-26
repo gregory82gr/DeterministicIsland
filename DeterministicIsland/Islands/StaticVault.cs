@@ -1,4 +1,5 @@
 using DeterministicIsland.domain;
+using DeterministicIsland.Events;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -19,6 +20,9 @@ namespace DeterministicIsland.Islands
         private readonly Dictionary<string, List<ILMVector>> _history = new();
         private readonly Dictionary<Guid, ILMVector> _byId = new();
         private readonly Dictionary<string, Derivation> _derivations = new();
+        private readonly DomainEventBus _events;
+
+        public StaticVault(DomainEventBus? events = null) => _events = events ?? new DomainEventBus();
 
         // Normalisation must be fixed and documented (§12.3.1): lower-cased, whitespace-trimmed.
         public static string Normalize(string query) => query.Trim().ToLowerInvariant();
@@ -34,7 +38,7 @@ namespace DeterministicIsland.Islands
         public ILMVector Register(string query, double value, DateTime validFrom, string approvedBy)
         {
             var vector = Append(query, validFrom, approvedBy, new[] { value }, isDeterministic: true, pointerTo: null,
-                derivedFrom: null, derivedBy: null);
+                derivedFrom: null, derivation: null);
             RecomputeDependents(query, validFrom, approvedBy);
             return vector;
         }
@@ -48,7 +52,7 @@ namespace DeterministicIsland.Islands
                 throw new InvalidOperationException($"Cannot register a dangling pointer: vector {targetVectorId} does not exist.");
 
             var vector = Append(query, validFrom, approvedBy, Array.Empty<double>(), isDeterministic: false,
-                pointerTo: targetVectorId, derivedFrom: null, derivedBy: null);
+                pointerTo: targetVectorId, derivedFrom: null, derivation: null);
             RecomputeDependents(query, validFrom, approvedBy);
             return vector;
         }
@@ -99,10 +103,8 @@ namespace DeterministicIsland.Islands
             var inputs = derivation.InputQueries.Select(q => Resolve(q, validFrom)).ToList();
             double value = derivation.Compute(inputs.Select(i => i.Value).ToList());
 
-            var vector = Append(derivation.Query, validFrom, approvedBy, new[] { value }, isDeterministic: true,
-                pointerTo: null, derivedFrom: inputs.Select(i => i.VectorId).ToList(), derivedBy: derivation.Name);
-            _derivations[Key(derivation.Query)] = derivation;
-            return vector;
+            return Append(derivation.Query, validFrom, approvedBy, new[] { value }, isDeterministic: true,
+                pointerTo: null, derivedFrom: inputs.Select(i => i.VectorId).ToList(), derivation: derivation);
         }
 
         // The update discipline of §12.4.4, applied automatically to derived islands (§24.4.1).
@@ -120,7 +122,7 @@ namespace DeterministicIsland.Islands
         }
 
         private ILMVector Append(string query, DateTime validFrom, string approvedBy, double[] embedding,
-            bool isDeterministic, Guid? pointerTo, IReadOnlyList<Guid>? derivedFrom, string? derivedBy)
+            bool isDeterministic, Guid? pointerTo, IReadOnlyList<Guid>? derivedFrom, Derivation? derivation)
         {
             if (string.IsNullOrWhiteSpace(approvedBy))
                 throw new ArgumentException("Every island update requires human sign-off (§12.4.4).", nameof(approvedBy));
@@ -140,9 +142,6 @@ namespace DeterministicIsland.Islands
                         $"A new version of '{query}' must start after {current.Determinism.ValidFrom:O}; history is append-only.");
             }
 
-            // A value or pointer registered over a derived island replaces its derivation rule.
-            if (derivedBy is null)
-                _derivations.Remove(key);
 
             // Reject an update that a dependent derived island could not follow in time;
             // it would leave that island stale for its whole validity (§24.4.1).
@@ -175,11 +174,19 @@ namespace DeterministicIsland.Islands
                     ApprovedBy = approvedBy,
                     PointerTo = pointerTo,
                     DerivedFrom = derivedFrom,
-                    DerivedBy = derivedBy
+                    DerivedBy = derivation?.Name
                 }
             };
             versions.Add(vector);
             _byId[vector.VectorId] = vector;
+
+            // A value or pointer registered over a derived island replaces its derivation rule.
+            if (derivation is null)
+                _derivations.Remove(key);
+            else
+                _derivations[key] = derivation;
+
+            _events.Publish(new IslandAdded(key, query, vector, derivation?.Name, derivation?.InputQueries, DateTime.UtcNow));
             return vector;
         }
     }

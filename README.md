@@ -23,7 +23,8 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 * **Shield** (`Shield`, §17.4): bounds every AI proposal with `min(proposed, maxSafe)` on every cycle, with `maxSafe` taken from the vault.
 * **Protection Islands** (`IslandCatalog`): sensor-triggered interlocks (pressure relief, radiation containment, thermal protection) that are evaluated on **every** cycle. Their thresholds and outputs come from the vault.
 * **Causality Lock** (`CausalityLock`, §12.3.3): engaged when the operator notes explicitly request a `"deterministic island"`. While it is engaged the command must come from an island or a Frozen Snapshot. Otherwise the Arbiter escalates to **Human-in-the-Loop** by throwing `DeterminismViolationException`. It never falls back silently to the stochastic core.
-* **System Arbiter** (`CompleteSystemArbiter`): `Execute` runs a control cycle. It orchestrates the above, resolves conflicts between islands, and writes every decision to the audit trail. `Answer` resolves a factual query as in §12.4.2: Static Vault first, then a candidate vector (e.g. from RAG), and only then the stochastic generator (it returns `null`). Under a Causality Lock it escalates instead of falling through.
+* **System Arbiter** (`CompleteSystemArbiter`): `Execute` runs a control cycle. It orchestrates the above, resolves conflicts between islands, and publishes one `ControlDecisionMade` event per cycle. `Answer` resolves a factual query as in §12.4.2: Static Vault first, then a candidate vector (e.g. from RAG), and only then the stochastic generator (it returns `null`). Under a Causality Lock it escalates instead of falling through.
+* **Domain Events** (`DomainEventBus`, §22.7, §23.4): the vault publishes `IslandAdded` for every new version, including pointers, derived islands and automatic recomputations. The Arbiter publishes `IslandTriggered` for every vault fact that governed a decision, and `ControlDecisionMade` for every cycle. Auditing is an Observer listener (`AuditLogListener`, `JsonLinesEventLog`), so neither the vault nor the Arbiter knows that auditing exists.
 
 ### 📜 Neural Constitution (§26.4)
 
@@ -47,7 +48,7 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 | **1. Priority Ring** | Islands of *different* priorities triggered | The island with the higher ring (`CriticalSafety > Structural > Operational`) takes control. |
 | **2. Fail-Safe SCRAM** | Islands of the *same* priority with conflicting demands | Immediate **Emergency SCRAM** (valve to 0%). The audit record is flagged `RequiresHumanReview`. |
 | **3. Human-in-the-Loop** | Causality Lock engaged with no deterministic answer, **or** the AI's MC Dropout interval exceeds the vault limit | `DeterminismViolationException` / `UncertaintyEscalationException` (both `HumanEscalationException`): the AI command is not applied and the record is flagged `RequiresHumanReview`. |
-| **4. Auditable Boundary** | Every control cycle | One JSON line per decision in `nexus1-audit.jsonl`: reading, lock state, AI proposal, triggered islands with the vault entries and versions they used, and the final command. |
+| **4. Auditable Boundary** | Every control cycle | One JSON line per decision in `nexus1-audit.jsonl`: reading, lock state, AI proposal, triggered islands with the vault entries and versions they used, and the final command. Every `IslandAdded` / `IslandTriggered` event goes to `nexus1-events.jsonl`. |
 
 > **Note on the book.** Rules 1 and 2 are an extension of this POC; they are not part of the book. The book (§12.4.3, p. 94) resolves conflicts with a fixed precedence between mechanisms (Static Vault → routed vector → Frozen Snapshot) and treats any disagreement between two deterministic sources as an error for human review. This is why the SCRAM record is flagged for review instead of being treated as settled.
 
@@ -64,6 +65,7 @@ DeterministicIsland/
 ├── Islands/                       # StaticVault, VectorResolver, DerivedIslandFactory, FrozenSnapshotConfig,
 │                                  # Shield, SafetyLimits, IslandCatalog, CausalityLock
 ├── Audit/                         # AuditRecord, JSON Lines and in-memory audit logs
+├── Events/                        # Domain events, DomainEventBus, listeners
 └── Governance/                    # NeuralConstitution
 DeterministicIsland.Tests/         # xUnit tests
 ```
@@ -78,7 +80,7 @@ DeterministicIsland.Tests/         # xUnit tests
 ### Execution Steps
 ```bash
 cd DeterministicIsland
-dotnet run          # runs the nine scenarios and writes nexus1-audit.jsonl next to the binary
+dotnet run          # runs the nine scenarios; writes nexus1-audit.jsonl and nexus1-events.jsonl next to the binary
 cd ..
 dotnet test         # runs the xUnit test suite
 ```
