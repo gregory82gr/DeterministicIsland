@@ -53,7 +53,7 @@ namespace DeterministicIsland.Governance
 
             new ConstitutionalRule(
                 "Every registered fact's provenance and approval are permanently recorded.",
-                "Append-only update discipline (§12.4.4): versions are closed, never edited, and each names its approver; every version is saved to an append-only repository before it takes effect (§23.2).",
+                "Append-only update discipline (§12.4.4): versions are closed, never edited, and each names its approver; every version is saved to an append-only, hash-chained repository before it takes effect (§23.2).",
                 RuleSource.Book,
                 new[]
                 {
@@ -61,17 +61,20 @@ namespace DeterministicIsland.Governance
                     "StaticVaultTests.Register_RequiresHumanSignOff",
                     "DerivedIslandTests.InputUpdate_RecomputesTheDerivedIslandAutomatically",
                     "IslandRepositoryTests.ReopenedVault_HasTheSameVersionsPointersAndDerivedIslands",
-                    "IslandRepositoryTests.FailedSave_LeavesTheVaultUnchanged"
+                    "IslandRepositoryTests.FailedSave_LeavesTheVaultUnchanged",
+                    "IslandRepositoryTests.EditedValueInTheFile_BreaksTheHashChain"
                 }),
 
             new ConstitutionalRule(
                 "No fully autonomous action is taken without a human retaining override authority.",
-                "Human-in-the-Loop escalation and RequiresHumanReview audit flags (§12.3.3, §12.4.3), plus human sign-off on every vault update. A live manual override of the actuator is outside this POC.",
+                "OperatorOverride: a named operator can always replace the AI's command and answer any escalation, but never a triggered safety island or SCRAM, which keep final authority (§17.6). Plus Human-in-the-Loop escalation, RequiresHumanReview flags (§12.3.3, §12.4.3) and human sign-off on every vault update.",
                 RuleSource.Book,
                 new[]
                 {
+                    "OperatorOverrideTests.Override_ReplacesTheAiCommandAndIsAudited",
+                    "OperatorOverrideTests.Override_AnswersAnUncertaintyEscalation",
+                    "OperatorOverrideTests.Override_NeverOverridesATriggeredSafetyIsland",
                     "CompleteSystemArbiterTests.UncertainAiCommand_IsNotAppliedAndEscalatesToHuman",
-                    "CompleteSystemArbiterTests.SamePriorityConflict_ScramsAndFlagsForHumanReview",
                     "StaticVaultTests.Register_RequiresHumanSignOff"
                 }),
 

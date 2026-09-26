@@ -82,8 +82,9 @@ namespace DeterministicIsland
             return null;
         }
 
-        public ControlCommand Execute(SensorReading reading)
+        public ControlCommand Execute(SensorReading reading, OperatorOverride? operatorOverride = null)
         {
+            operatorOverride?.Validate();
             DateTime now = _clock();
             var causalityLock = new CausalityLock();
             if (CausalityLock.IsRequestedBy(reading.OperatorNotes))
@@ -119,8 +120,26 @@ namespace DeterministicIsland
                 FinalValveOpening = command?.ValveOpeningTarget,
                 Origin = command?.Origin ?? "Human-in-the-Loop",
                 RequiresHumanReview = requiresHumanReview,
-                Reason = reason
+                Reason = reason,
+                Operator = operatorOverride
             };
+
+            // Μια εντολή χειριστή δεν παρακάμπτει ποτέ ενεργοποιημένη νησίδα ασφαλείας (§17.6).
+            string? NotAppliedOperatorNote(string authority) => operatorOverride is null ? null :
+                $"Operator override ({operatorOverride.ValveOpening:P1} by {operatorOverride.OperatorId}) not applied: {authority} retains authority.";
+
+            if (!activeIslands.Any() && operatorOverride is not null)
+            {
+                // Ο χειριστής αντικαθιστά την πρόταση του AI και απαντά σε κάθε κλιμάκωση.
+                // Το Shield δεν εφαρμόζεται: το όριό του αφορά εντολές που προτείνει το AI.
+                var manual = new ControlCommand(operatorOverride.ValveOpening, $"Operator override by {operatorOverride.OperatorId}");
+                _events.Publish(new ControlDecisionMade(Audit(ArbiterDecision.OperatorOverride, manual, requiresHumanReview: false, operatorOverride.Reason)));
+
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.WriteLine($"[OPERATOR OVERRIDE] {operatorOverride.OperatorId} set the valve to {manual.ValveOpeningTarget:P1} (AI proposed {aiProposal.ValveOpeningTarget:P1}): {operatorOverride.Reason}");
+                Console.ResetColor();
+                return manual;
+            }
 
             if (!activeIslands.Any())
             {
@@ -179,9 +198,11 @@ namespace DeterministicIsland
                 // Το βιβλίο (§12.4.3, σελ. 94) ζητά η διαφωνία να καταγράφεται για ανθρώπινο έλεγχο,
                 // οπότε η εγγραφή ελέγχου σημειώνεται RequiresHumanReview.
                 var scram = new ControlCommand(0.0, "FAIL-SAFE EMERGENCY SCRAM", IsScrammed: true);
-                _events.Publish(new ControlDecisionMade(Audit(ArbiterDecision.Scram, scram, requiresHumanReview: true,
-                    $"Conflicting demands at the same priority level ({highestPriority}): " +
-                    string.Join(", ", topTierIslands.Select(i => $"{i.Name} -> {i.EnforcedOutput:P1}")))));
+                string scramReason = $"Conflicting demands at the same priority level ({highestPriority}): " +
+                    string.Join(", ", topTierIslands.Select(i => $"{i.Name} -> {i.EnforcedOutput:P1}"));
+                if (NotAppliedOperatorNote("the fail-safe SCRAM") is { } scramNote)
+                    scramReason += " " + scramNote;
+                _events.Publish(new ControlDecisionMade(Audit(ArbiterDecision.Scram, scram, requiresHumanReview: true, scramReason)));
 
                 Console.ForegroundColor = ConsoleColor.DarkRed;
                 Console.WriteLine($"\n[FATAL DEADLOCK] Multiple islands triggered at the SAME priority level ({highestPriority}) with conflicting demands!");
@@ -191,6 +212,8 @@ namespace DeterministicIsland
                 }
                 Console.WriteLine($"[FAIL-SAFE] Arbiter cannot resolve conflict logically. Triggering immediate SCRAM shutdown procedure...");
                 Console.WriteLine("[AUDIT] Conflict logged for human review (§12.4.3).");
+                if (NotAppliedOperatorNote("the fail-safe SCRAM") is { } scramConsoleNote)
+                    Console.WriteLine($"[OPERATOR] {scramConsoleNote}");
                 Console.ResetColor();
 
                 return scram;
@@ -199,12 +222,15 @@ namespace DeterministicIsland
             // Αν δεν υπάρχει αδιέξοδο, κερδίζει η κορυφαία νησίδα
             DynamicIsland winningIsland = topTierIslands.First();
             var command = new ControlCommand(winningIsland.EnforcedOutput, $"Deterministic Island: {winningIsland.Name}");
-            _events.Publish(new ControlDecisionMade(Audit(ArbiterDecision.IslandOverride, command, requiresHumanReview: false)));
+            string? islandNote = NotAppliedOperatorNote($"safety island '{winningIsland.Name}'");
+            _events.Publish(new ControlDecisionMade(Audit(ArbiterDecision.IslandOverride, command, requiresHumanReview: false, islandNote)));
 
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"[AUDIT OVERRIDE] Island '{winningIsland.Name}' ({winningIsland.Priority}) took control.");
             foreach (var source in winningIsland.Sources)
                 Console.WriteLine($"  -> Static Vault: {source}");
+            if (islandNote is not null)
+                Console.WriteLine($"[OPERATOR] {islandNote}");
             Console.ResetColor();
 
             return command;
