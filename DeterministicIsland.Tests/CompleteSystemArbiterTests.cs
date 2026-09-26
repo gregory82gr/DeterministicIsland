@@ -18,19 +18,60 @@ public class CompleteSystemArbiterTests
     private CompleteSystemArbiter Arbiter(MiniNeuralNetwork? frozen = null, DateTime? now = null) =>
         new(new MiniNeuralNetwork(), _vault, _audit, () => now ?? Now, frozen);
 
+    // Runs one cycle and returns its audit record, whether the arbiter acted or escalated.
+    private AuditRecord ExecuteAndAudit(CompleteSystemArbiter arbiter, SensorReading reading)
+    {
+        try { arbiter.Execute(reading); }
+        catch (HumanEscalationException) { }
+        return _audit.Records[^1];
+    }
+
     [Fact]
-    public void NormalOperation_AiCommandNeverExceedsTheShieldLimit()
+    public void NormalOperation_ConfidentAiCommandIsApprovedWithinTheShieldLimit()
     {
         var arbiter = Arbiter();
 
-        for (int i = 0; i < 200; i++)
+        for (int i = 0; i < 50; i++)
         {
-            var command = arbiter.Execute(new SensorReading(60.0, 7.5, "Routine check.", false));
+            var command = arbiter.Execute(new SensorReading(30.0, 5.0, "Routine check.", false));
             Assert.InRange(command.ValveOpeningTarget, 0.0, 0.75);
         }
 
-        Assert.All(_audit.Records, r => Assert.Contains(r.Decision, new[] { ArbiterDecision.AiApproved, ArbiterDecision.AiShielded }));
-        Assert.All(_audit.Records.Where(r => r.Decision == ArbiterDecision.AiShielded), r => Assert.True(r.AiProposal > 0.75));
+        Assert.All(_audit.Records, r => Assert.Equal(ArbiterDecision.AiApproved, r.Decision));
+        Assert.All(_audit.Records, r => Assert.InRange(r.AiUncertainty95!.Value, 0.0, 0.20));
+    }
+
+    [Fact]
+    public void Shield_CapsAProposalAboveTheVaultLimit()
+    {
+        var shielded = new Shield(_vault).Enforce(new ControlCommand(0.9, "AI"), Now);
+
+        Assert.Equal(0.75, shielded.ValveOpeningTarget);
+        Assert.Contains("shielded", shielded.Origin);
+    }
+
+    [Fact]
+    public void UncertainAiCommand_IsNotAppliedAndEscalatesToHuman()
+    {
+        // §13.6: at 85 °C / 7 bar the MC Dropout interval is about ±29%, above the vault's ±20%.
+        Assert.Throws<UncertaintyEscalationException>(() => Arbiter().Execute(new SensorReading(85.0, 7.0, "", false)));
+
+        var record = _audit.Records.Single();
+        Assert.Equal(ArbiterDecision.HumanEscalation, record.Decision);
+        Assert.True(record.RequiresHumanReview);
+        Assert.Null(record.FinalValveOpening);
+        Assert.True(record.AiUncertainty95 > 0.20);
+    }
+
+    [Fact]
+    public void UncertaintyLimit_IsReadFromTheVault()
+    {
+        _vault.Register(SafetyLimits.MaxAiUncertainty95, 0.40, Now, "Engineer");
+
+        var command = Arbiter().Execute(new SensorReading(85.0, 7.0, "", false));
+
+        Assert.False(command.IsScrammed);
+        Assert.Equal(ArbiterDecision.AiApproved, _audit.Records.Single().Decision);
     }
 
     [Fact]
@@ -96,7 +137,7 @@ public class CompleteSystemArbiterTests
     [Fact]
     public void CausalityLock_IsNotEngagedByRetrieve()
     {
-        var command = Arbiter().Execute(new SensorReading(60.0, 5.0, "Retrieve the latest telemetry.", false));
+        var command = Arbiter().Execute(new SensorReading(30.0, 5.0, "Retrieve the latest telemetry.", false));
 
         Assert.False(_audit.Records.Single().CausalityLockEngaged);
         Assert.False(command.IsScrammed);
@@ -110,10 +151,10 @@ public class CompleteSystemArbiterTests
         var reading = new SensorReading(60.0, 8.5, "", false);
 
         var before = Arbiter(now: effective.AddDays(-1)).Execute(reading);
-        var after = Arbiter(now: effective).Execute(reading);
+        var after = ExecuteAndAudit(Arbiter(now: effective), reading);
 
         Assert.Equal(1.0, before.ValveOpeningTarget);
-        Assert.DoesNotContain("High Pressure", after.Origin);
+        Assert.DoesNotContain(after.TriggeredIslands, i => i.Name == "High Pressure Emergency Loop");
     }
 
     [Fact]
