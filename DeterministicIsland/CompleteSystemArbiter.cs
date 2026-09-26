@@ -15,6 +15,9 @@ namespace DeterministicIsland
     // =
     public class CompleteSystemArbiter
     {
+        // Number of MC Dropout forward passes per control cycle (§13.6).
+        public const int McDropoutPasses = 200;
+
         private readonly MiniNeuralNetwork _aiCore;
         private readonly MiniNeuralNetwork? _frozenSnapshot;
         private readonly StaticVault _vault;
@@ -69,7 +72,13 @@ namespace DeterministicIsland
 
             // Με ενεργό Causality Lock, μόνο το Frozen Snapshot είναι αποδεκτός πυρήνας (§12.4.3).
             MiniNeuralNetwork core = causalityLock.IsEngaged && _frozenSnapshot is not null ? _frozenSnapshot : _aiCore;
-            ControlCommand aiProposal = core.Predict(reading);
+
+            // Ο στοχαστικός πυρήνας δίνει μέσο όρο και διάστημα αβεβαιότητας με MC Dropout (§13.6).
+            // Το Frozen Snapshot είναι εξ ορισμού ντετερμινιστικό, οπότε αρκεί μία εκτέλεση.
+            UncertainPrediction? estimate = core.IsFrozen ? null : core.PredictWithUncertainty(reading, McDropoutPasses);
+            ControlCommand aiProposal = estimate is null
+                ? core.Predict(reading)
+                : new ControlCommand(estimate.Mean, $"{estimate.Origin} (MC Dropout mean of {estimate.Passes})");
 
             // Οι νησίδες αξιολογούνται σε κάθε κύκλο, όχι μόνο όταν το ζητήσει ο χειριστής (§17.6).
             List<DynamicIsland> activeIslands = IslandCatalog.Triggered(reading, _vault, now);
@@ -81,6 +90,7 @@ namespace DeterministicIsland
                 CausalityLockEngaged = causalityLock.IsEngaged,
                 AiProposal = aiProposal.ValveOpeningTarget,
                 AiOrigin = aiProposal.Origin,
+                AiUncertainty95 = estimate?.HalfWidth95,
                 TriggeredIslands = activeIslands
                     .Select(i => new IslandSnapshot(i.Name, i.Priority, i.EnforcedOutput, i.Sources))
                     .ToList(),
@@ -106,13 +116,28 @@ namespace DeterministicIsland
                     throw new DeterminismViolationException(reason);
                 }
 
+                // Αν το AI είναι πολύ αβέβαιο, η εντολή του δεν εφαρμόζεται: κλιμάκωση σε άνθρωπο.
+                // Το ανεκτό εύρος είναι γεγονός του Static Vault, όχι επιλογή του μοντέλου (§16.9).
+                double maxUncertainty = SafetyLimits.Require(_vault, SafetyLimits.MaxAiUncertainty95, now).Value;
+                if (estimate is not null && estimate.HalfWidth95 > maxUncertainty)
+                {
+                    string reason = $"AI prediction {estimate.Mean:P1} ± {estimate.HalfWidth95:P1} (95%) exceeds the permitted ± {maxUncertainty:P1}.";
+                    _auditLog.Record(Audit(ArbiterDecision.HumanEscalation, null, requiresHumanReview: true, reason));
+
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.WriteLine($"[HUMAN-IN-THE-LOOP] {reason}");
+                    Console.ResetColor();
+                    throw new UncertaintyEscalationException(reason);
+                }
+
                 // Ακόμη και χωρίς νησίδα, η πρόταση του AI περνά από το Shield (§17.4).
                 ControlCommand shielded = _shield.Enforce(aiProposal, now);
                 bool wasShielded = shielded != aiProposal;
                 _auditLog.Record(Audit(wasShielded ? ArbiterDecision.AiShielded : ArbiterDecision.AiApproved, shielded, requiresHumanReview: false));
 
                 Console.ForegroundColor = wasShielded ? ConsoleColor.Yellow : ConsoleColor.Green;
-                Console.WriteLine($"[INFO] Safe Zone: No islands triggered. Executing: {shielded.Origin} -> {shielded.ValveOpeningTarget:P1}");
+                string interval = estimate is null ? "" : $" (95% interval {estimate.Lower95:P1} to {estimate.Upper95:P1})";
+                Console.WriteLine($"[INFO] Safe Zone: No islands triggered. Executing: {shielded.Origin} -> {shielded.ValveOpeningTarget:P1}{interval}");
                 Console.ResetColor();
                 return shielded;
             }

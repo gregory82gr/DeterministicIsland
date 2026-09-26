@@ -7,6 +7,7 @@ namespace DeterministicIsland.Islands
     public static class SafetyLimits
     {
         public const string MaxAiValveOpening = "maximum safe valve opening for ai-proposed commands";
+        public const string MaxAiUncertainty95 = "maximum ai prediction uncertainty as 95% half-width";
         public const string PressureReliefSetpointBar = "high pressure relief setpoint in bar";
 
         // §24.4.1: three redundant pressure transmitters, each with its own certified maximum.
@@ -25,6 +26,7 @@ namespace DeterministicIsland.Islands
         public static void SeedDefaults(StaticVault vault, DateTime validFrom, string approvedBy)
         {
             vault.Register(MaxAiValveOpening, 0.75, validFrom, approvedBy);
+            vault.Register(MaxAiUncertainty95, 0.20, validFrom, approvedBy);
             vault.Register(PressureTransmitterLimitsBar[0], 8.4, validFrom, approvedBy);
             vault.Register(PressureTransmitterLimitsBar[1], 8.0, validFrom, approvedBy);
             vault.Register(PressureTransmitterLimitsBar[2], 8.2, validFrom, approvedBy);

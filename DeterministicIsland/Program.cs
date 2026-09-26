@@ -8,7 +8,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 8 ARCHITECTURAL SCENARIOS ===");
+        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 9 ARCHITECTURAL SCENARIOS ===");
         var vault = new StaticVault();
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
         var auditLog = new JsonLinesAuditLog(Path.Combine(AppContext.BaseDirectory, "nexus1-audit.jsonl"));
@@ -107,6 +107,20 @@ class Program
         vault.Register(SafetyLimits.PressureTransmitterLimitsBar[1], 7.6, DateTime.UtcNow, approvedBy: "Instrumentation Engineer");
         Console.WriteLine($"[DERIVED] {SafetyLimits.Describe(SafetyLimits.PressureReliefSetpointBar, vault.Resolve(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow))}");
         arbiter.Execute(r8);
+
+        // -------------------------------------------------------------------
+        // Σενάριο 9: Το AI είναι πολύ αβέβαιο (MC Dropout) -> Human-in-the-Loop
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 9: Uncertain AI Prediction (MC Dropout Interval Too Wide -> Human-in-the-Loop) ---");
+        var r9 = new SensorReading(TemperatureCelsius: 85.0, PressureBar: 7.0, "Routine check.", RadiationLeakDetected: false);
+        try
+        {
+            arbiter.Execute(r9);
+        }
+        catch (UncertaintyEscalationException)
+        {
+            Console.WriteLine("[ESCALATED] The AI command was NOT applied; awaiting operator decision.");
+        }
 
         Console.WriteLine($"\n[AUDIT TRAIL] Every control decision above was appended to {auditLog.Path}");
         Console.WriteLine("=================================================================");
