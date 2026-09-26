@@ -10,7 +10,7 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 9 ARCHITECTURAL SCENARIOS ===");
+        Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 10 ARCHITECTURAL SCENARIOS ===");
 
         // Neural Constitution (§26.4): οι εγγυήσεις που το σύστημα δεν παραβιάζει ποτέ.
         Console.WriteLine("\n[NEURAL CONSTITUTION]");
@@ -30,7 +30,11 @@ class Program
             .Subscribe<IslandAdded>(eventLog).Subscribe<IslandTriggered>(eventLog)
             .Subscribe<IslandAdded>(recorder).Subscribe<IslandTriggered>(recorder);
 
-        var vault = new StaticVault(events);
+        // Μόνιμη αποθήκευση (§23.2): κάθε νέα έκδοση γράφεται σε αρχείο JSON Lines.
+        // Το demo ξεκινά από καθαρό αρχείο ώστε τα σενάρια να δίνουν πάντα το ίδιο αποτέλεσμα.
+        string vaultPath = Path.Combine(AppContext.BaseDirectory, "nexus1-vault.jsonl");
+        File.Delete(vaultPath);
+        var vault = new StaticVault(events, new JsonLinesIslandRepository(vaultPath));
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
         var ai = new MiniNeuralNetwork();
         var arbiter = new CompleteSystemArbiter(ai, vault, events);
@@ -141,6 +145,20 @@ class Program
         {
             Console.WriteLine("[ESCALATED] The AI command was NOT applied; awaiting operator decision.");
         }
+
+        // -------------------------------------------------------------------
+        // Σενάριο 10: Το Vault ξαναφορτώνεται από το αρχείο με ίδιο ιστορικό
+        // -------------------------------------------------------------------
+        Console.WriteLine("\n--- Scenario 10: Persistence (The Vault Is Reloaded From Its File) ---");
+        var reloaded = new StaticVault(repository: new JsonLinesIslandRepository(vaultPath));
+        var liveSetpoint = vault.Resolve(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow);
+        var reloadedSetpoint = reloaded.Resolve(SafetyLimits.PressureReliefSetpointBar, DateTime.UtcNow);
+        bool identical = reloaded.VersionCount == vault.VersionCount
+            && vault.Queries.All(q => vault.History(q).Select(v => v.VectorId).SequenceEqual(reloaded.History(q).Select(v => v.VectorId)));
+        Console.ForegroundColor = identical && reloadedSetpoint.VectorId == liveSetpoint.VectorId ? ConsoleColor.Cyan : ConsoleColor.Red;
+        Console.WriteLine($"[PERSISTENCE] Reloaded {reloaded.VersionCount} versions of {reloaded.Queries.Count} facts from {vaultPath}");
+        Console.WriteLine($"[PERSISTENCE] Same history as the live vault: {identical}; relief setpoint = {reloadedSetpoint.Value} bar ({reloadedSetpoint.Determinism!.Version})");
+        Console.ResetColor();
 
         Console.WriteLine($"\n[AUDIT TRAIL] Every control decision above was appended to {auditLog.Path}");
         Console.WriteLine($"[DOMAIN EVENTS] {recorder.Events.OfType<IslandAdded>().Count()} IslandAdded, " +

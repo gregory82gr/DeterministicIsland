@@ -24,6 +24,7 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 * **Protection Islands** (`IslandCatalog`): sensor-triggered interlocks (pressure relief, radiation containment, thermal protection) that are evaluated on **every** cycle. Their thresholds and outputs come from the vault.
 * **Causality Lock** (`CausalityLock`, §12.3.3): engaged when the operator notes explicitly request a `"deterministic island"`. While it is engaged the command must come from an island or a Frozen Snapshot. Otherwise the Arbiter escalates to **Human-in-the-Loop** by throwing `DeterminismViolationException`. It never falls back silently to the stochastic core.
 * **System Arbiter** (`CompleteSystemArbiter`): `Execute` runs a control cycle. It orchestrates the above, resolves conflicts between islands, and publishes one `ControlDecisionMade` event per cycle. `Answer` resolves a factual query as in §12.4.2: Static Vault first, then a candidate vector (e.g. from RAG), and only then the stochastic generator (it returns `null`). Under a Causality Lock it escalates instead of falling through.
+* **Persistence** (`IIslandRepository`, `JsonLinesIslandRepository`, §23.2): each new version is saved as one JSON line **before** it takes effect, so a failed save leaves the vault unchanged. The file is append-only, like the vault's own history. On start-up the vault replays the file exactly, with the same `VectorId`s so pointers and derived islands still resolve. It rejects a record that is inconsistent: missing approver, skipped version, out-of-order dates, a pointer or derivation input not saved before it, or an unknown derivation rule. Derivation rules are stored by name (`DerivationRules`: `minimum`, `maximum`, or registered by the application). *Limitation:* a value edited directly in the file is not detected. A hash chain over the lines would be the next step.
 * **Domain Events** (`DomainEventBus`, §22.7, §23.4): the vault publishes `IslandAdded` for every new version, including pointers, derived islands and automatic recomputations. The Arbiter publishes `IslandTriggered` for every vault fact that governed a decision, and `ControlDecisionMade` for every cycle. Auditing is an Observer listener (`AuditLogListener`, `JsonLinesEventLog`), so neither the vault nor the Arbiter knows that auditing exists.
 
 ### 📜 Neural Constitution (§26.4)
@@ -62,7 +63,8 @@ DeterministicIsland/
 ├── CompleteSystemArbiter.cs       # The Arbiter
 ├── domain/                        # SensorReading, ControlCommand, DynamicIsland, ILMVector
 ├── ProbabilisticCore/             # MiniNeuralNetwork (stochastic / frozen)
-├── Islands/                       # StaticVault, VectorResolver, DerivedIslandFactory, FrozenSnapshotConfig,
+├── Islands/                       # StaticVault, IslandRepository, DerivationRules, VectorResolver,
+│                                  # DerivedIslandFactory, FrozenSnapshotConfig,
 │                                  # Shield, SafetyLimits, IslandCatalog, CausalityLock
 ├── Audit/                         # AuditRecord, JSON Lines and in-memory audit logs
 ├── Events/                        # Domain events, DomainEventBus, listeners
@@ -80,7 +82,8 @@ DeterministicIsland.Tests/         # xUnit tests
 ### Execution Steps
 ```bash
 cd DeterministicIsland
-dotnet run          # runs the nine scenarios; writes nexus1-audit.jsonl and nexus1-events.jsonl next to the binary
+dotnet run          # runs the ten scenarios; writes nexus1-vault.jsonl (recreated on each run),
+                    # nexus1-audit.jsonl and nexus1-events.jsonl next to the binary
 cd ..
 dotnet test         # runs the xUnit test suite
 ```
@@ -98,6 +101,7 @@ dotnet test         # runs the xUnit test suite
 7. **Intra-Vector Routing:** the backup line's relief setpoint is registered as a pointer to the primary line's setpoint and resolves deterministically to 8 bar. An ordinary RAG vector without a Determinism block is then rejected under the Causality Lock and escalated to a human.
 8. **Derived Island:** the relief setpoint is `min(PT-1, PT-2, PT-3) = min(8.4, 8.0, 8.2) = 8.0 bar`. PT-2 is recalibrated to 7.6 bar, the setpoint is recomputed automatically to 7.6 bar, and a reading of 7.8 bar now triggers the pressure-relief island.
 9. **Uncertain AI → Human-in-the-Loop:** 85 °C, 7 bar. No island applies, but the AI's 95% interval is about ±27%, wider than the permitted ±20%. The command is not applied and the cycle escalates.
+10. **Persistence:** the vault is reopened from `nexus1-vault.jsonl`. It has the same 13 versions of 11 facts, with the same vector ids, and the relief setpoint still resolves to 7.6 bar (v2).
 
 ---
 
