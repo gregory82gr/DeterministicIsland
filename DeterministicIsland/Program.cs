@@ -1,6 +1,7 @@
 ﻿using DeterministicIsland;
 using DeterministicIsland.Audit;
 using DeterministicIsland.domain;
+using DeterministicIsland.Governance;
 using DeterministicIsland.Islands;
 using DeterministicIsland.ProbabilisticCore;
 
@@ -9,6 +10,15 @@ class Program
     static void Main(string[] args)
     {
         Console.WriteLine("=== NEXUS-1 COMPLETE POC: ALL 9 ARCHITECTURAL SCENARIOS ===");
+
+        // Neural Constitution (§26.4): οι εγγυήσεις που το σύστημα δεν παραβιάζει ποτέ.
+        Console.WriteLine("\n[NEURAL CONSTITUTION]");
+        for (int i = 0; i < NeuralConstitution.Rules.Count; i++)
+        {
+            var rule = NeuralConstitution.Rules[i];
+            string source = rule.Source == RuleSource.Book ? "book" : "POC extension";
+            Console.WriteLine($"  {i + 1}. {rule.Name} ({source}; {rule.VerifiedBy.Count} tests)");
+        }
         var vault = new StaticVault();
         SafetyLimits.SeedDefaults(vault, validFrom: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), approvedBy: "Shift Safety Engineer");
         var auditLog = new JsonLinesAuditLog(Path.Combine(AppContext.BaseDirectory, "nexus1-audit.jsonl"));
