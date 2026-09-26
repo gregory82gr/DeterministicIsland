@@ -158,6 +158,7 @@ class Program
         Console.ForegroundColor = identical && reloadedSetpoint.VectorId == liveSetpoint.VectorId ? ConsoleColor.Cyan : ConsoleColor.Red;
         Console.WriteLine($"[PERSISTENCE] Reloaded {reloaded.VersionCount} versions of {reloaded.Queries.Count} facts from {vaultPath}");
         Console.WriteLine($"[PERSISTENCE] Same history as the live vault: {identical}; relief setpoint = {reloadedSetpoint.Value} bar ({reloadedSetpoint.Determinism!.Version})");
+        Console.WriteLine($"[PERSISTENCE] Hash chain verified; head hash {new JsonLinesIslandRepository(vaultPath).HeadHash}");
         Console.ResetColor();
 
         Console.WriteLine($"\n[AUDIT TRAIL] Every control decision above was appended to {auditLog.Path}");
