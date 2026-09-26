@@ -23,6 +23,7 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 * **Shield** (`Shield`, §17.4): bounds every AI proposal with `min(proposed, maxSafe)` on every cycle, with `maxSafe` taken from the vault.
 * **Protection Islands** (`IslandCatalog`): sensor-triggered interlocks (pressure relief, radiation containment, thermal protection) that are evaluated on **every** cycle. Their thresholds and outputs come from the vault.
 * **Causality Lock** (`CausalityLock`, §12.3.3): engaged when the operator notes explicitly request a `"deterministic island"`. While it is engaged the command must come from an island or a Frozen Snapshot. Otherwise the Arbiter escalates to **Human-in-the-Loop** by throwing `DeterminismViolationException`. It never falls back silently to the stochastic core.
+* **Operator Override** (`OperatorOverride`, Constitution rule 5): `Execute(reading, override)` lets a named operator, with a stated reason, replace the AI's command. This also answers a Human-in-the-Loop escalation. The operator is not bound by the Shield, whose limit applies to AI proposals only. An override **never** beats a triggered safety island or a SCRAM, because certified safety functions keep final physical authority (§17.6). In that case it is recorded in the audit trail as "not applied".
 * **System Arbiter** (`CompleteSystemArbiter`): `Execute` runs a control cycle. It orchestrates the above, resolves conflicts between islands, and publishes one `ControlDecisionMade` event per cycle. `Answer` resolves a factual query as in §12.4.2: Static Vault first, then a candidate vector (e.g. from RAG), and only then the stochastic generator (it returns `null`). Under a Causality Lock it escalates instead of falling through.
 * **Persistence** (`IIslandRepository`, `JsonLinesIslandRepository`, §23.2): each new version is saved as one JSON line **before** it takes effect, so a failed save leaves the vault unchanged. The file is append-only, like the vault's own history. On start-up the vault replays the file exactly, with the same `VectorId`s so pointers and derived islands still resolve. It rejects a record that is inconsistent: missing approver, skipped version, out-of-order dates, a pointer or derivation input not saved before it, or an unknown derivation rule. Derivation rules are stored by name (`DerivationRules`: `minimum`, `maximum`, or registered by the application).
 * **Tamper evidence** (hash chain): every line stores `PreviousHash` and `Hash = SHA-256(PreviousHash + Record)`, starting from 64 zeros. A record edited, removed, inserted or reordered in the file makes loading fail with the line number. *Limitation:* cutting lines off the end, or rewriting the whole file with a new chain, cannot be seen from the file alone. For that, `HeadHash` (printed by scenario 10) should be recorded outside the file and compared on the next start.
@@ -38,7 +39,7 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 | 2 | No control action reaches an actuator outside its certified safe range. | Book |
 | 3 | A Causality Lock, once engaged, never silently falls back to a stochastic answer. | Book |
 | 4 | Every registered fact's provenance and approval are permanently recorded. | Book |
-| 5 | No fully autonomous action is taken without a human retaining override authority. | Book (partly: escalation and sign-off are implemented; a live manual override of the actuator is not) |
+| 5 | No fully autonomous action is taken without a human retaining override authority. | Book |
 | 6 | An AI command is never applied when its uncertainty exceeds the certified bound. | POC extension |
 | 7 | A routed or derived fact is never used once the fact it rests on has changed. | POC extension |
 | 8 | Conflicting safety demands at the same priority end in a fail-safe SCRAM, never a guess. | POC extension |
@@ -83,7 +84,7 @@ DeterministicIsland.Tests/         # xUnit tests
 ### Execution Steps
 ```bash
 cd DeterministicIsland
-dotnet run          # runs the ten scenarios; writes nexus1-vault.jsonl (recreated on each run),
+dotnet run          # runs the eleven scenarios; writes nexus1-vault.jsonl (recreated on each run),
                     # nexus1-audit.jsonl and nexus1-events.jsonl next to the binary
 cd ..
 dotnet test         # runs the xUnit test suite
@@ -103,6 +104,7 @@ dotnet test         # runs the xUnit test suite
 8. **Derived Island:** the relief setpoint is `min(PT-1, PT-2, PT-3) = min(8.4, 8.0, 8.2) = 8.0 bar`. PT-2 is recalibrated to 7.6 bar, the setpoint is recomputed automatically to 7.6 bar, and a reading of 7.8 bar now triggers the pressure-relief island.
 9. **Uncertain AI → Human-in-the-Loop:** 85 °C, 7 bar. No island applies, but the AI's 95% interval is about ±27%, wider than the permitted ±20%. The command is not applied and the cycle escalates.
 10. **Persistence:** the vault is reopened from `nexus1-vault.jsonl`. It has the same 13 versions of 11 facts, with the same vector ids, the hash chain verifies, and the relief setpoint still resolves to 7.6 bar (v2).
+11. **Operator Override:** the operator answers scenario 9's escalation by setting the valve to 55%, which is applied. The same operator then tries to open the valve to 100% during scenario 4's SCRAM; the command is recorded but not applied.
 
 ---
 

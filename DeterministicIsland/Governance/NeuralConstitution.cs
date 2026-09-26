@@ -67,12 +67,14 @@ namespace DeterministicIsland.Governance
 
             new ConstitutionalRule(
                 "No fully autonomous action is taken without a human retaining override authority.",
-                "Human-in-the-Loop escalation and RequiresHumanReview audit flags (§12.3.3, §12.4.3), plus human sign-off on every vault update. A live manual override of the actuator is outside this POC.",
+                "OperatorOverride: a named operator can always replace the AI's command and answer any escalation, but never a triggered safety island or SCRAM, which keep final authority (§17.6). Plus Human-in-the-Loop escalation, RequiresHumanReview flags (§12.3.3, §12.4.3) and human sign-off on every vault update.",
                 RuleSource.Book,
                 new[]
                 {
+                    "OperatorOverrideTests.Override_ReplacesTheAiCommandAndIsAudited",
+                    "OperatorOverrideTests.Override_AnswersAnUncertaintyEscalation",
+                    "OperatorOverrideTests.Override_NeverOverridesATriggeredSafetyIsland",
                     "CompleteSystemArbiterTests.UncertainAiCommand_IsNotAppliedAndEscalatesToHuman",
-                    "CompleteSystemArbiterTests.SamePriorityConflict_ScramsAndFlagsForHumanReview",
                     "StaticVaultTests.Register_RequiresHumanSignOff"
                 }),
 
