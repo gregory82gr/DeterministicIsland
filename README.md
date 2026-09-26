@@ -71,7 +71,8 @@ DeterministicIsland/
 ├── Audit/                         # AuditRecord, JSON Lines and in-memory audit logs
 ├── Events/                        # Domain events, DomainEventBus, listeners
 └── Governance/                    # NeuralConstitution
-DeterministicIsland.Tests/         # xUnit tests
+DeterministicIsland.Api/          # Web API (§23.5): NexusRuntime (application layer) + endpoints
+DeterministicIsland.Tests/         # xUnit tests, including API tests with WebApplicationFactory
 ```
 
 ---
@@ -89,6 +90,29 @@ dotnet run          # runs the eleven scenarios; writes nexus1-vault.jsonl (recr
 cd ..
 dotnet test         # runs the xUnit test suite
 ```
+
+### Web API (§23.5)
+```bash
+cd DeterministicIsland.Api
+dotnet run          # listens on the URL printed at start-up
+```
+
+The API is a thin layer over the same Arbiter. There is no way to reach an answer without going through the Static Vault, the Shield, the islands and the Causality Lock. On start-up it reloads `nexus1-vault.jsonl` (hash chain verified). If the file is empty, it commissions the default safety limits once. Paths are set in `appsettings.json` under `Nexus`. Requests are processed one at a time, because the domain model is not thread-safe.
+
+| Endpoint | Purpose |
+| :--- | :--- |
+| `POST /control` | One control cycle. Body: `temperatureCelsius`, `pressureBar`, `operatorNotes`, `radiationLeakDetected`, optional `operatorOverride {operatorId, valveOpening, reason}`. The response gives `applied`, `valveOpening`, `decision`, `requiresHumanReview`, `reason`, the AI proposal and its uncertainty, and the triggered islands. An escalation is `200` with `applied: false`; an invalid override is `400`. |
+| `POST /answer` | A factual query (§12.4.2). Body: `query`, `requireDeterminism`. A Static Vault hit returns the value with its version and approver. With no deterministic answer the query falls through (`isDeterministic: false`), or, under the lock, returns `409` (Human-in-the-Loop). |
+| `GET /vault/history?query=…` | Every version of one fact: value, validity, approver, pointer, derivation. |
+| `GET /vault/queries` | The facts registered in the vault. |
+| `GET /constitution` | The Neural Constitution, with mechanisms and verifying tests. |
+
+```bash
+curl -X POST http://localhost:5000/control -H "Content-Type: application/json" \
+     -d '{"temperatureCelsius":95,"pressureBar":4,"radiationLeakDetected":false}'
+```
+
+The API deliberately has **no endpoint that writes safety limits**. The book (§22.8) names authentication and authorisation on who may register islands as a prerequisite for that, and this POC does not provide them.
 
 ---
 
