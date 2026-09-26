@@ -25,6 +25,21 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 * **Causality Lock** (`CausalityLock`, §12.3.3): engaged when the operator notes explicitly request a `"deterministic island"`. While it is engaged the command must come from an island or a Frozen Snapshot. Otherwise the Arbiter escalates to **Human-in-the-Loop** by throwing `DeterminismViolationException`. It never falls back silently to the stochastic core.
 * **System Arbiter** (`CompleteSystemArbiter`): `Execute` runs a control cycle. It orchestrates the above, resolves conflicts between islands, and writes every decision to the audit trail. `Answer` resolves a factual query as in §12.4.2: Static Vault first, then a candidate vector (e.g. from RAG), and only then the stochastic generator (it returns `null`). Under a Causality Lock it escalates instead of falling through.
 
+### 📜 Neural Constitution (§26.4)
+
+`NeuralConstitution` lists every guarantee the system makes. For each one it names the mechanism that enforces it and the tests that demonstrate it. The program prints the list at start-up, and `NeuralConstitutionTests` fails if a rule cites a test that does not exist.
+
+| # | Rule | Source |
+| :-- | :--- | :--- |
+| 1 | A resolved deterministic fact is never overridden by a generated one. | Book |
+| 2 | No control action reaches an actuator outside its certified safe range. | Book |
+| 3 | A Causality Lock, once engaged, never silently falls back to a stochastic answer. | Book |
+| 4 | Every registered fact's provenance and approval are permanently recorded. | Book |
+| 5 | No fully autonomous action is taken without a human retaining override authority. | Book (partly: escalation and sign-off are implemented; a live manual override of the actuator is not) |
+| 6 | An AI command is never applied when its uncertainty exceeds the certified bound. | POC extension |
+| 7 | A routed or derived fact is never used once the fact it rests on has changed. | POC extension |
+| 8 | Conflicting safety demands at the same priority end in a fail-safe SCRAM, never a guess. | POC extension |
+
 ### 🛡️ Conflict Resolution Matrix
 
 | Strategy | Condition | Action |
@@ -48,7 +63,8 @@ DeterministicIsland/
 ├── ProbabilisticCore/             # MiniNeuralNetwork (stochastic / frozen)
 ├── Islands/                       # StaticVault, VectorResolver, DerivedIslandFactory, FrozenSnapshotConfig,
 │                                  # Shield, SafetyLimits, IslandCatalog, CausalityLock
-└── Audit/                         # AuditRecord, JSON Lines and in-memory audit logs
+├── Audit/                         # AuditRecord, JSON Lines and in-memory audit logs
+└── Governance/                    # NeuralConstitution
 DeterministicIsland.Tests/         # xUnit tests
 ```
 
