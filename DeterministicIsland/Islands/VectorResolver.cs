@@ -58,6 +58,19 @@ namespace DeterministicIsland.Islands
                 throw new InvalidOperationException(
                     $"Stale pointer: vector {resolved.VectorId} ({resolved.Determinism.Version}) is not valid at {instant:O}.");
 
+            // A derived island is only as current as its inputs (§24.4.1): if any input it was
+            // computed from is no longer valid, the derived value is stale and must not be used.
+            if (isResolved && asOf is DateTime at && resolved.Determinism!.DerivedFrom is { } inputs)
+            {
+                foreach (var inputId in inputs)
+                {
+                    var input = store.Get(inputId);
+                    if (input?.Determinism is not { } d || !d.IsValidAt(at))
+                        throw new InvalidOperationException(
+                            $"Stale derived island: vector {resolved.VectorId} was computed from input {inputId}, which is not valid at {at:O}.");
+                }
+            }
+
             return resolved;
         }
     }

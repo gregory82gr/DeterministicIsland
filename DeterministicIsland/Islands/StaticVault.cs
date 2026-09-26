@@ -12,8 +12,13 @@ namespace DeterministicIsland.Islands
     // =======================================================================
     public sealed class StaticVault : IVectorStore
     {
+        // §24.4.1: how a derived island is computed from other islands.
+        private sealed record Derivation(string Query, IReadOnlyList<string> InputQueries, string Name,
+            Func<IReadOnlyList<double>, double> Compute);
+
         private readonly Dictionary<string, List<ILMVector>> _history = new();
         private readonly Dictionary<Guid, ILMVector> _byId = new();
+        private readonly Dictionary<string, Derivation> _derivations = new();
 
         // Normalisation must be fixed and documented (§12.3.1): lower-cased, whitespace-trimmed.
         public static string Normalize(string query) => query.Trim().ToLowerInvariant();
@@ -24,8 +29,15 @@ namespace DeterministicIsland.Islands
             return Convert.ToHexString(bytes).ToLowerInvariant();
         }
 
-        public ILMVector Register(string query, double value, DateTime validFrom, string approvedBy) =>
-            Append(query, validFrom, approvedBy, new[] { value }, isDeterministic: true, pointerTo: null);
+        private static string Key(string query) => HashQuery(Normalize(query));
+
+        public ILMVector Register(string query, double value, DateTime validFrom, string approvedBy)
+        {
+            var vector = Append(query, validFrom, approvedBy, new[] { value }, isDeterministic: true, pointerTo: null,
+                derivedFrom: null, derivedBy: null);
+            RecomputeDependents(query, validFrom, approvedBy);
+            return vector;
+        }
 
         // §12.3.3: registers a query whose answer defers to another, already registered vector.
         // The pointer targets one specific version; when that version is superseded the
@@ -35,18 +47,85 @@ namespace DeterministicIsland.Islands
             if (!_byId.ContainsKey(targetVectorId))
                 throw new InvalidOperationException($"Cannot register a dangling pointer: vector {targetVectorId} does not exist.");
 
-            return Append(query, validFrom, approvedBy, Array.Empty<double>(), isDeterministic: false, pointerTo: targetVectorId);
+            var vector = Append(query, validFrom, approvedBy, Array.Empty<double>(), isDeterministic: false,
+                pointerTo: targetVectorId, derivedFrom: null, derivedBy: null);
+            RecomputeDependents(query, validFrom, approvedBy);
+            return vector;
+        }
+
+        // §24.4.1: a derived island is a pure function of other islands' answers, so it is
+        // itself deterministic. It records the exact input vectors it was computed from and
+        // is recomputed automatically whenever one of its input queries gets a new version.
+        public ILMVector RegisterDerived(string query, IReadOnlyList<string> inputQueries, string derivationName,
+            Func<IReadOnlyList<double>, double> compute, DateTime validFrom, string approvedBy)
+        {
+            if (inputQueries.Count == 0)
+                throw new ArgumentException("A derived island needs at least one input.", nameof(inputQueries));
+            if (inputQueries.Any(i => Key(i) == Key(query)))
+                throw new ArgumentException("A derived island cannot be one of its own inputs.", nameof(inputQueries));
+
+            var derivation = new Derivation(query, inputQueries.ToList(), derivationName, compute);
+            var vector = AppendDerived(derivation, validFrom, approvedBy);
+            RecomputeDependents(query, validFrom, approvedBy);
+            return vector;
         }
 
         public ILMVector? Get(Guid vectorId) => _byId.GetValueOrDefault(vectorId);
 
+        public ILMVector? Lookup(string query, DateTime asOf) =>
+            _history.TryGetValue(Key(query), out var versions)
+                ? versions.LastOrDefault(v => v.Determinism!.IsValidAt(asOf))
+                : null;
+
+        // Resolves a query to a deterministic vector that is valid at asOf, following pointers
+        // under an engaged Causality Lock. Anything else fails loudly.
+        public ILMVector Resolve(string query, DateTime asOf)
+        {
+            var entry = Lookup(query, asOf)
+                ?? throw new InvalidOperationException($"'{query}' is not registered in the Static Vault at {asOf:O}.");
+
+            var causalityLock = new CausalityLock();
+            causalityLock.Engage();
+            return GuardedResolver.ResolveUnderLock(entry, this, causalityLock, asOf);
+        }
+
+        public IReadOnlyList<ILMVector> History(string query) =>
+            _history.TryGetValue(Key(query), out var versions)
+                ? versions.AsReadOnly()
+                : Array.Empty<ILMVector>();
+
+        private ILMVector AppendDerived(Derivation derivation, DateTime validFrom, string approvedBy)
+        {
+            var inputs = derivation.InputQueries.Select(q => Resolve(q, validFrom)).ToList();
+            double value = derivation.Compute(inputs.Select(i => i.Value).ToList());
+
+            var vector = Append(derivation.Query, validFrom, approvedBy, new[] { value }, isDeterministic: true,
+                pointerTo: null, derivedFrom: inputs.Select(i => i.VectorId).ToList(), derivedBy: derivation.Name);
+            _derivations[Key(derivation.Query)] = derivation;
+            return vector;
+        }
+
+        // The update discipline of §12.4.4, applied automatically to derived islands (§24.4.1).
+        private void RecomputeDependents(string changedQuery, DateTime validFrom, string approvedBy)
+        {
+            var dependents = _derivations.Values
+                .Where(d => d.InputQueries.Any(i => Key(i) == Key(changedQuery)))
+                .ToList();
+
+            foreach (var derivation in dependents)
+            {
+                AppendDerived(derivation, validFrom, $"{approvedBy} (auto-recomputed after '{changedQuery}' changed)");
+                RecomputeDependents(derivation.Query, validFrom, approvedBy);
+            }
+        }
+
         private ILMVector Append(string query, DateTime validFrom, string approvedBy, double[] embedding,
-            bool isDeterministic, Guid? pointerTo)
+            bool isDeterministic, Guid? pointerTo, IReadOnlyList<Guid>? derivedFrom, string? derivedBy)
         {
             if (string.IsNullOrWhiteSpace(approvedBy))
                 throw new ArgumentException("Every island update requires human sign-off (§12.4.4).", nameof(approvedBy));
 
-            var key = HashQuery(Normalize(query));
+            var key = Key(query);
             if (!_history.TryGetValue(key, out var versions))
             {
                 versions = new List<ILMVector>();
@@ -58,10 +137,28 @@ namespace DeterministicIsland.Islands
                 var current = versions[^1];
                 if (validFrom <= current.Determinism!.ValidFrom)
                     throw new InvalidOperationException(
-                        $"A new version must start after {current.Determinism.ValidFrom:O}; history is append-only.");
+                        $"A new version of '{query}' must start after {current.Determinism.ValidFrom:O}; history is append-only.");
+            }
 
+            // A value or pointer registered over a derived island replaces its derivation rule.
+            if (derivedBy is null)
+                _derivations.Remove(key);
+
+            // Reject an update that a dependent derived island could not follow in time;
+            // it would leave that island stale for its whole validity (§24.4.1).
+            foreach (var dependent in _derivations.Values.Where(d => d.InputQueries.Any(i => Key(i) == key)))
+            {
+                var dependentCurrent = Lookup(dependent.Query, DateTime.MaxValue);
+                if (dependentCurrent is not null && validFrom <= dependentCurrent.Determinism!.ValidFrom)
+                    throw new InvalidOperationException(
+                        $"Updating '{query}' from {validFrom:O} would retroactively invalidate derived island '{dependent.Query}'.");
+            }
+
+            if (versions.Count > 0)
+            {
                 // Close the previous version so that the validity intervals partition time (§24.4.1).
-                var closed = current with { Determinism = current.Determinism with { ValidTo = validFrom } };
+                var current = versions[^1];
+                var closed = current with { Determinism = current.Determinism! with { ValidTo = validFrom } };
                 versions[^1] = closed;
                 _byId[closed.VectorId] = closed;
             }
@@ -76,25 +173,14 @@ namespace DeterministicIsland.Islands
                     Version = $"v{versions.Count + 1}",
                     ValidFrom = validFrom,
                     ApprovedBy = approvedBy,
-                    PointerTo = pointerTo
+                    PointerTo = pointerTo,
+                    DerivedFrom = derivedFrom,
+                    DerivedBy = derivedBy
                 }
             };
             versions.Add(vector);
             _byId[vector.VectorId] = vector;
             return vector;
         }
-
-        public ILMVector? Lookup(string query, DateTime asOf)
-        {
-            var key = HashQuery(Normalize(query));
-            return _history.TryGetValue(key, out var versions)
-                ? versions.LastOrDefault(v => v.Determinism!.IsValidAt(asOf))
-                : null;
-        }
-
-        public IReadOnlyList<ILMVector> History(string query) =>
-            _history.TryGetValue(HashQuery(Normalize(query)), out var versions)
-                ? versions.AsReadOnly()
-                : Array.Empty<ILMVector>();
     }
 }
