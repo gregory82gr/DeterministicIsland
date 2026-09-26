@@ -1,4 +1,5 @@
 ﻿using DeterministicIsland.domain;
+using DeterministicIsland.Islands;
 using DeterministicIsland.ProbabilisticCore;
 using System;
 using System.Collections.Generic;
@@ -14,23 +15,34 @@ namespace DeterministicIsland
     public class CompleteSystemArbiter
     {
         private readonly MiniNeuralNetwork _aiCore;
+        private readonly StaticVault _vault;
+        private readonly Shield _shield;
+        private readonly Func<DateTime> _clock;
 
-        public CompleteSystemArbiter(MiniNeuralNetwork aiCore)
+        public CompleteSystemArbiter(MiniNeuralNetwork aiCore, StaticVault vault, Func<DateTime>? clock = null)
         {
             _aiCore = aiCore;
+            _vault = vault;
+            _shield = new Shield(vault);
+            _clock = clock ?? (() => DateTime.UtcNow);
         }
 
         public ControlCommand Execute(SensorReading reading)
         {
-            ControlCommand currentCommand = _aiCore.Predict(reading);
-            List<DynamicIsland> activeIslands = GenerateIslandsOnDemand(reading);
+            DateTime now = _clock();
+            ControlCommand aiProposal = _aiCore.Predict(reading);
+
+            // Οι νησίδες αξιολογούνται σε κάθε κύκλο, όχι μόνο όταν το ζητήσει ο χειριστής (§17.6).
+            List<DynamicIsland> activeIslands = IslandCatalog.Triggered(reading, _vault, now);
 
             if (!activeIslands.Any())
             {
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"[INFO] Safe Zone: No islands triggered. Executing: {currentCommand.Origin} -> {currentCommand.ValveOpeningTarget:P1}");
+                // Ακόμη και χωρίς νησίδα, η πρόταση του AI περνά από το Shield (§17.4).
+                ControlCommand shielded = _shield.Enforce(aiProposal, now);
+                Console.ForegroundColor = shielded == aiProposal ? ConsoleColor.Green : ConsoleColor.Yellow;
+                Console.WriteLine($"[INFO] Safe Zone: No islands triggered. Executing: {shielded.Origin} -> {shielded.ValveOpeningTarget:P1}");
                 Console.ResetColor();
-                return currentCommand;
+                return shielded;
             }
 
             // Ταξινομούμε με βάση την προτεραιότητα
@@ -64,39 +76,11 @@ namespace DeterministicIsland
 
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"[AUDIT OVERRIDE] Island '{winningIsland.Name}' ({winningIsland.Priority}) took control.");
+            foreach (var source in winningIsland.Sources)
+                Console.WriteLine($"  -> Static Vault: {source}");
             Console.ResetColor();
 
             return new ControlCommand(winningIsland.EnforcedOutput, $"Deterministic Island: {winningIsland.Name}");
-        }
-
-        private List<DynamicIsland> GenerateIslandsOnDemand(SensorReading reading)
-        {
-            var triggeredIslands = new List<DynamicIsland>();
-            string notes = reading.OperatorNotes.ToLower();
-
-            if (notes.Contains("deterministic island") || notes.Contains("retrieve"))
-            {
-                // Νησίδα 1: Κρίσιμη Ασφάλεια Πίεσης (Priority: CriticalSafety)
-                var pressureIsland = new DynamicIsland(
-                    Name: "High Pressure Emergency Loop",
-                    Priority: IslandPriority.CriticalSafety,
-                    Condition: (r) => r.PressureBar >= 8.0,
-                    EnforcedOutput: 1.0 // Ζητάει 100% άνοιγμα βαλβίδας
-                );
-
-                // Νησίδα 2: Κρίσιμη Ασφάλεια Διαρροής Ραδιενέργειας (Priority: CriticalSafety)
-                var radiationIsland = new DynamicIsland(
-                    Name: "Radiation Leak Containment Boundary",
-                    Priority: IslandPriority.CriticalSafety,
-                    Condition: (r) => r.RadiationLeakDetected == true,
-                    EnforcedOutput: 0.0 // Ζητάει 0% (κλείσιμο βαλβίδας) για να εγκλωβίσει τη ραδιενέργεια
-                );
-
-                if (pressureIsland.Condition(reading)) triggeredIslands.Add(pressureIsland);
-                if (radiationIsland.Condition(reading)) triggeredIslands.Add(radiationIsland);
-            }
-
-            return triggeredIslands;
         }
     }
 
