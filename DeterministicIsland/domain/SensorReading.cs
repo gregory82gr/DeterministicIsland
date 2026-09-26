@@ -13,5 +13,5 @@ namespace DeterministicIsland.domain
         public double ValveOpeningTarget { get; init; } = IsScrammed ? 0.0 : Math.Clamp(ValveOpeningTarget, 0.0, 1.0);
     }
 
-    public record DynamicIsland(string Name, IslandPriority Priority, Func<SensorReading, bool> Condition, double EnforcedOutput);
+    public record DynamicIsland(string Name, IslandPriority Priority, Func<SensorReading, bool> Condition, double EnforcedOutput, IReadOnlyList<string> Sources);
 }
