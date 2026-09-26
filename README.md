@@ -1,18 +1,21 @@
 # NEXUS-1: Bounded AI & Deterministic Islands POC
 
-[![Platform](https://shields.io)](https://microsoft.com)
-[![Language](https://shields.io)](https://microsoft.com)
-[![Architecture](https://shields.io)]()
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/8.0)
+[![Language](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/dotnet/csharp/)
+![Architecture](https://img.shields.io/badge/architecture-DDD-1d4e89)
+[![Guide](https://img.shields.io/badge/guide-PDF%2C%2056%20pages-b83280)](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf)
 
 A Proof of Concept (POC) demonstrating the **Deterministic Islands** and **System Arbiter** architecture described in the *NEXUS-1 Engineering Series* by **Grigorios Agathangelidis**. 
 
 This repository implements a hybrid control system designed for critical industrial infrastructure, wrapping a stochastic (probabilistic) Neural Network inside a strictly predictable, zero-entropy (\(H=0\)) deterministic software shell.
 
+> 📘 **New to the field? Start with the guide.** [*Deterministic Islands in Practice — An Engineer-to-Engineer Guide*](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) (PDF, 56 pages) explains the POC step by step as architecture rather than C#. It covers the neural core computed by hand, dropout and MC Dropout, the Static Vault, versions, pointers, derived islands, the Arbiter, the Causality Lock, operator override and the trust infrastructure. It also sets out the approach this POC took beyond the book and ends with graded exercises. See [Documentation](#-documentation).
+
 ---
 
 ## 🏗️ Architectural Overview
 
-The system establishes a **"Probabilistic Core, Deterministic Shell"** topology using Domain-Driven Design (DDD). Section numbers refer to the book listed under *Bibliography*.
+The system establishes a **"Probabilistic Core, Deterministic Shell"** topology using Domain-Driven Design (DDD). Section numbers refer to the book listed under *Bibliography*. The [engineer guide](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) explains each item below in depth.
 
 * **Stochastic Core** (`MiniNeuralNetwork`): a small 2-4-1 perceptron that predicts the valve opening from temperature and pressure. Dropout stays active at inference, so two identical readings can produce two different commands (§12.2).
 * **Uncertainty Quantification** (`PredictWithUncertainty`, §13.6): MC Dropout runs each reading through the network 200 times and reports the mean with a 95% interval (mean ± 1.96·s). The mean becomes the AI proposal. If the interval is wider than the vault's limit (±20%), the command is not applied and the cycle escalates to a human (`UncertaintyEscalationException`). As §16.9 recommends, the threshold is a vault fact, not a modelling choice.
@@ -61,7 +64,7 @@ The system establishes a **"Probabilistic Core, Deterministic Shell"** topology 
 
 ```
 DeterministicIsland/
-├── Program.cs                     # Six demonstration scenarios
+├── Program.cs                     # Eleven demonstration scenarios
 ├── CompleteSystemArbiter.cs       # The Arbiter
 ├── domain/                        # SensorReading, ControlCommand, DynamicIsland, ILMVector
 ├── ProbabilisticCore/             # MiniNeuralNetwork (stochastic / frozen)
@@ -73,6 +76,7 @@ DeterministicIsland/
 └── Governance/                    # NeuralConstitution
 DeterministicIsland.Api/          # Web API (§23.5): NexusRuntime (application layer) + endpoints
 DeterministicIsland.Tests/         # xUnit tests, including API tests with WebApplicationFactory
+docs/                              # Engineer-to-engineer guide (PDF) and the source that generates it
 ```
 
 ---
@@ -132,9 +136,36 @@ The API deliberately has **no endpoint that writes safety limits**. The book (§
 
 ---
 
+## 📚 Documentation
+
+| Document | What it is |
+| :--- | :--- |
+| [`docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf`](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) | **Deterministic Islands in Practice**: a 56-page engineer-to-engineer guide in six parts: orientation, the stochastic core, Deterministic Islands, trust infrastructure, our approach, hands-on. |
+| [`docs/source/`](docs/source) | The Python source that generates the guide. Its network mirrors `MiniNeuralNetwork.cs` exactly, so every number and chart in the guide is computed, not typed. |
+
+The guide suggests three reading paths:
+- **Quick tour (1 hour):** Chapters 1–3 and Chapter 25, with the demo running.
+- **Engineer's path (1–2 days):** Parts I–IV and the Level 1–2 exercises.
+- **Reviewer's path:** Part V (what we took from the book, what we changed and why, honest boundaries), the Neural Constitution, and the test map.
+
+To rebuild the guide after changing the code:
+
+```bash
+pip install -r docs/source/requirements.txt
+python docs/source/build_guide.py          # add --run to embed a fresh demo run
+```
+
+---
+
 ## 📖 Bibliography & References
-* Agathangelidis, G., *From Stochastic Chaos to Deterministic Certainty: AI for Critical Industrial Infrastructure*, NEXUS-1 Engineering Series, September 2026 — the book this POC is based on ([`From_Stochastic_Chaos_to_Deterministic_Certainty.pdf`](From_Stochastic_Chaos_to_Deterministic_Certainty.pdf)). Relevant chapters: 12 (Deterministic Islands), 17.4 (Safe RL: Shielding), 22 (Bounding the AI Context), 24 (Deterministic Islands — Deep Dive).
-* Agathangelidis, G., *From Core to Quantum: Quantum Mechanics and the Nucleus, for the Engineer Who Will Model Them*, NEXUS-1 Series, First Edition, September 2026 — the preceding volume of the series.
+* Agathangelidis, G., *From Stochastic Chaos to Deterministic Certainty: AI for Critical Industrial Infrastructure*, NEXUS-1 Engineering Series, Volume III, September 2026. This is the book the POC is based on. Relevant chapters: 12 (Deterministic Islands), 13.6 (MC Dropout), 17.4 (Safe RL: Shielding), 19.5 (Auditing), 22–23 (DDD, events, repositories, API), 24 (Deterministic Islands — Deep Dive), 26.4 (Neural Constitution).
+* Agathangelidis, G., *From Core to Quantum: Quantum Mechanics and the Nucleus, for the Engineer Who Will Model Them*, NEXUS-1 Series, Volume II, First Edition, September 2026.
+* Agathangelidis, G., *From Grid to Core*, NEXUS-1 Series, Volume I.
+
+### ✍️ The author's books
+NEXUS-1 is a planned twenty-volume series by **Grigorios Agathangelidis** that bridges foundational science with the engineering and computation that turns it into trustworthy systems. Its volumes run from the switchyard to the reactor core (*From Grid to Core*), from the core to the quantum rules of matter (*From Core to Quantum*), and from there to AI that can be trusted in critical systems (*From Stochastic Chaos to Deterministic Certainty*). The author's books are available on Leanpub:
+
+👉 **[leanpub.com/u/grigorios-kyriakos-agathangelidis](https://leanpub.com/u/grigorios-kyriakos-agathangelidis)**
 
 ---
 *Disclaimer: This codebase is a theoretical architectural companion to the NEXUS-1 project. It is intended strictly for educational and modeling demonstrations. It should not be used to operate or make automated safety decisions in real nuclear or critical industrial facilities.*

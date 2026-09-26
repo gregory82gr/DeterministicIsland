@@ -1,0 +1,77 @@
+=== NEXUS-1 COMPLETE POC: ALL 11 ARCHITECTURAL SCENARIOS ===
+
+[NEURAL CONSTITUTION]
+  1. A resolved deterministic fact is never overridden by a generated one. (book; 2 tests)
+  2. No control action reaches an actuator outside its certified safe range. (book; 2 tests)
+  3. A Causality Lock, once engaged, never silently falls back to a stochastic answer. (book; 3 tests)
+  4. Every registered fact's provenance and approval are permanently recorded. (book; 6 tests)
+  5. No fully autonomous action is taken without a human retaining override authority. (book; 5 tests)
+  6. An AI command is never applied when its uncertainty exceeds the certified bound. (POC extension; 2 tests)
+  7. A routed or derived fact is never used once the fact it rests on has changed. (POC extension; 2 tests)
+  8. Conflicting safety demands at the same priority end in a fail-safe SCRAM, never a guess. (POC extension; 2 tests)
+
+--- Scenario 1: Normal Operation (AI Decides, Bounded by the Shield) ---
+[INFO] Safe Zone: No islands triggered. Executing: AI Stochastic Core (MC Dropout mean of 200) -> 35.1 % (95% interval 17.6 % to 52.6 %)
+
+--- Scenario 2: High Temperature (Structural Island) ---
+[AUDIT OVERRIDE] Island 'Structural Thermal Protection' (Structural) took control.
+  -> Static Vault: maximum coolant temperature in celsius = 90 (v1, approved by Shift Safety Engineer)
+  -> Static Vault: valve opening for structural cooling = 0.6 (v1, approved by Shift Safety Engineer)
+
+--- Scenario 3: Standard Priority Resolution (Critical beats Structural) ---
+[AUDIT OVERRIDE] Island 'High Pressure Emergency Loop' (CriticalSafety) took control.
+  -> Static Vault: high pressure relief setpoint in bar = 8 (v1, derived: minimum of 3 inputs, approved by Shift Safety Engineer)
+  -> Static Vault: valve opening for high pressure relief = 1 (v1, approved by Shift Safety Engineer)
+
+--- Scenario 4: The Ultimate Deadlock (Same Priority Conflict -> SCRAM) ---
+
+[FATAL DEADLOCK] Multiple islands triggered at the SAME priority level (CriticalSafety) with conflicting demands!
+  !! Island: 'High Pressure Emergency Loop' demands Valve Opening -> 100.0 %
+  !! Island: 'Radiation Leak Containment Boundary' demands Valve Opening -> 0.0 %
+[FAIL-SAFE] Arbiter cannot resolve conflict logically. Triggering immediate SCRAM shutdown procedure...
+[AUDIT] Conflict logged for human review (§12.4.3).
+
+[FINAL SYSTEM STATE] Is Scrammed: True | Action Driven By: FAIL-SAFE EMERGENCY SCRAM
+
+--- Scenario 5: Causality Lock Without a Deterministic Answer (Human-in-the-Loop) ---
+[HUMAN-IN-THE-LOOP] Causality Lock engaged, but no deterministic mechanism resolved this reading.
+[ESCALATED] No deterministic mechanism resolved this reading, but a Causality Lock is engaged. The AI command was NOT applied; awaiting operator decision.
+
+--- Scenario 6: Causality Lock Resolved by a Frozen Snapshot (Bitwise Reproducible) ---
+[INFO] Safe Zone: No islands triggered. Executing: AI Frozen Snapshot -> 41.7 %
+[INFO] Safe Zone: No islands triggered. Executing: AI Frozen Snapshot -> 41.7 %
+[REPRODUCIBILITY] Identical output on repeat: True
+
+--- Scenario 7: Intra-Vector Routing (Backup Line Defers to the Primary Setpoint) ---
+[ROUTED] 'high pressure relief setpoint for backup line b in bar' -> vector c09b174b-6486-4273-8575-f5e93effa0f2 = 8 bar (v1, deterministic: True)
+[HUMAN-IN-THE-LOOP] Vector 7aeefebb-cc1d-4219-899b-aaa84491b22e has no deterministic resolution, but a Causality Lock is engaged for this response.
+
+--- Scenario 8: Derived Island (Relief Setpoint = Minimum of Three Transmitters) ---
+[DERIVED] high pressure relief setpoint in bar = 8 (v1, derived: minimum of 3 inputs, approved by Shift Safety Engineer)
+[DERIVED] high pressure relief setpoint in bar = 7.6 (v2, derived: minimum of 3 inputs, approved by Instrumentation Engineer (auto-recomputed after 'maximum safe reading of pressure transmitter pt-2 in bar' changed))
+[AUDIT OVERRIDE] Island 'High Pressure Emergency Loop' (CriticalSafety) took control.
+  -> Static Vault: high pressure relief setpoint in bar = 7.6 (v2, derived: minimum of 3 inputs, approved by Instrumentation Engineer (auto-recomputed after 'maximum safe reading of pressure transmitter pt-2 in bar' changed))
+  -> Static Vault: valve opening for high pressure relief = 1 (v1, approved by Shift Safety Engineer)
+
+--- Scenario 9: Uncertain AI Prediction (MC Dropout Interval Too Wide -> Human-in-the-Loop) ---
+[HUMAN-IN-THE-LOOP] AI prediction 64.2 % ± 29.6 % (95%) exceeds the permitted ± 20.0 %.
+[ESCALATED] The AI command was NOT applied; awaiting operator decision.
+
+--- Scenario 10: Persistence (The Vault Is Reloaded From Its File) ---
+[PERSISTENCE] Reloaded 13 versions of 11 facts from ./nexus1-vault.jsonl
+[PERSISTENCE] Same history as the live vault: True; relief setpoint = 7.6 bar (v2)
+[PERSISTENCE] Hash chain verified; head hash f9be46a2e4a219b58e664bf6bb7b68770cd9452dfae4267e04909f72d3c7cf75
+
+--- Scenario 11: Operator Override (Answers an Escalation, Never Overrides a Safety Island) ---
+[OPERATOR OVERRIDE] Shift Operator A set the valve to 55.0 % (AI proposed 61.7 %): Answering the uncertainty escalation after checking local gauges.
+
+[FATAL DEADLOCK] Multiple islands triggered at the SAME priority level (CriticalSafety) with conflicting demands!
+  !! Island: 'High Pressure Emergency Loop' demands Valve Opening -> 100.0 %
+  !! Island: 'Radiation Leak Containment Boundary' demands Valve Opening -> 0.0 %
+[FAIL-SAFE] Arbiter cannot resolve conflict logically. Triggering immediate SCRAM shutdown procedure...
+[AUDIT] Conflict logged for human review (§12.4.3).
+[OPERATOR] Operator override (100.0 % by Shift Operator A) not applied: the fail-safe SCRAM retains authority.
+
+[AUDIT TRAIL] Every control decision above was appended to ./nexus1-audit.jsonl
+[DOMAIN EVENTS] 13 IslandAdded, 15 IslandTriggered -> ./nexus1-events.jsonl
+=================================================================
