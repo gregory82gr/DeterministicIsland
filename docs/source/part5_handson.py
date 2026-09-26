@@ -232,3 +232,11 @@ python docs/source/build_guide.py --run
         "of the numbers. Treat the guide like the constitution: it is part of the evidence, and it should "
         "change in the same commit as the code it describes.",
     )
+    s.section("Licence")
+    s.p(
+        "The code, the tests and this guide, including its source in <font face='Mono'>docs/source/</font>, "
+        "are released under the MIT License (Copyright © 2026 Grigorios Agathangelidis; see the "
+        "<font face='Mono'>LICENSE</font> file in the repository). The NEXUS-1 books quoted and cited "
+        "here are separate works and are not covered by that licence. The software and this guide are "
+        "provided “as is”, without warranty, and are not intended for any safety-related use.",
+    )

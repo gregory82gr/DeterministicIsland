@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- Shared metadata for every project in the solution. See LICENSE. -->
+  <PropertyGroup>
+    <Authors>Grigorios Agathangelidis</Authors>
+    <Copyright>Copyright (c) 2026 Grigorios Agathangelidis</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/gregory82gr/DeterministicIsland</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gregory82gr/DeterministicIsland</RepositoryUrl>
+  </PropertyGroup>
+
+</Project>
