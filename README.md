@@ -3,13 +3,13 @@
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![Language](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/dotnet/csharp/)
 ![Architecture](https://img.shields.io/badge/architecture-DDD-1d4e89)
-[![Guide](https://img.shields.io/badge/guide-PDF%2C%2056%20pages-b83280)](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf)
+[![Guide](https://img.shields.io/badge/guide-PDF%2C%2057%20pages-b83280)](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf)
 
 A Proof of Concept (POC) demonstrating the **Deterministic Islands** and **System Arbiter** architecture described in the *NEXUS-1 Engineering Series* by **Grigorios Agathangelidis**. 
 
 This repository implements a hybrid control system designed for critical industrial infrastructure, wrapping a stochastic (probabilistic) Neural Network inside a strictly predictable, zero-entropy (\(H=0\)) deterministic software shell.
 
-> 📘 **New to the field? Start with the guide.** [*Deterministic Islands in Practice — An Engineer-to-Engineer Guide*](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) (PDF, 56 pages) explains the POC step by step as architecture rather than C#. It covers the neural core computed by hand, dropout and MC Dropout, the Static Vault, versions, pointers, derived islands, the Arbiter, the Causality Lock, operator override and the trust infrastructure. It also sets out the approach this POC took beyond the book and ends with graded exercises. See [Documentation](#-documentation).
+> 📘 **New to the field? Start with the guide.** [*Deterministic Islands in Practice — An Engineer-to-Engineer Guide*](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) (PDF, 57 pages) explains the POC step by step as architecture rather than C#. It covers the neural core computed by hand, dropout and MC Dropout, the Static Vault, versions, pointers, derived islands, the Arbiter, the Causality Lock, operator override and the trust infrastructure. It also sets out the approach this POC took beyond the book and ends with graded exercises. See [Documentation](#-documentation).
 
 ---
 
@@ -140,7 +140,7 @@ The API deliberately has **no endpoint that writes safety limits**. The book (§
 
 | Document | What it is |
 | :--- | :--- |
-| [`docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf`](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) | **Deterministic Islands in Practice**: a 56-page engineer-to-engineer guide in six parts: orientation, the stochastic core, Deterministic Islands, trust infrastructure, our approach, hands-on. |
+| [`docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf`](docs/NEXUS-1_Deterministic_Islands_Engineer_Guide.pdf) | **Deterministic Islands in Practice**: a 57-page engineer-to-engineer guide in six parts: orientation, the stochastic core, Deterministic Islands, trust infrastructure, our approach, hands-on. |
 | [`docs/source/`](docs/source) | The Python source that generates the guide. Its network mirrors `MiniNeuralNetwork.cs` exactly, so every number and chart in the guide is computed, not typed. |
 
 The guide suggests three reading paths:
@@ -161,11 +161,40 @@ python docs/source/build_guide.py          # add --run to embed a fresh demo run
 * Agathangelidis, G., *From Stochastic Chaos to Deterministic Certainty: AI for Critical Industrial Infrastructure*, NEXUS-1 Engineering Series, Volume III, September 2026. This is the book the POC is based on. Relevant chapters: 12 (Deterministic Islands), 13.6 (MC Dropout), 17.4 (Safe RL: Shielding), 19.5 (Auditing), 22–23 (DDD, events, repositories, API), 24 (Deterministic Islands — Deep Dive), 26.4 (Neural Constitution).
 * Agathangelidis, G., *From Core to Quantum: Quantum Mechanics and the Nucleus, for the Engineer Who Will Model Them*, NEXUS-1 Series, Volume II, First Edition, September 2026.
 * Agathangelidis, G., *From Grid to Core*, NEXUS-1 Series, Volume I.
+* The complete list of the author's 22 books is under [The author's books](#%EF%B8%8F-the-authors-books).
 
 ### ✍️ The author's books
-NEXUS-1 is a planned twenty-volume series by **Grigorios Agathangelidis** that bridges foundational science with the engineering and computation that turns it into trustworthy systems. Its volumes run from the switchyard to the reactor core (*From Grid to Core*), from the core to the quantum rules of matter (*From Core to Quantum*), and from there to AI that can be trusted in critical systems (*From Stochastic Chaos to Deterministic Certainty*). The author's books are available on Leanpub:
+The NEXUS-1 series by **Grigorios Agathangelidis** now counts **22 books**. It began with a single experiment, an interactive console for an educational digital twin of a nuclear plant, and grew one open question at a time. The whole series keeps one standing rule: *nothing is stated as certain that has not been shown to hold in practice*. The books are available on Leanpub:
 
 👉 **[leanpub.com/u/grigorios-kyriakos-agathangelidis](https://leanpub.com/u/grigorios-kyriakos-agathangelidis)**
+
+| Theme | Book | In one line |
+| :--- | :--- | :--- |
+| Physics and engineering of the plant | *From Grid to Core* | The foundation of the series: from the 400 kV substation to the reactor core, with neutron kinetics and SCRAM. |
+|  | *From Queue to Core* | Stochastic queueing theory as a rigorous mathematical foundation for reactor kinetics, with C# implementations. |
+|  | *From Core to Quantum* | From the quantum crisis to the structure of the nucleus, and a complete quantum-circuit simulator in modelled C#. |
+| Interpretable and controlled AI | *From Flood to Cause* | When 200 alarms fire at once: a deterministic causal graph finds the root cause; the LLM only explains it. |
+|  | *From Trial to Policy* | Reinforcement learning from scratch with a fully interpretable Q-learning agent: 175 numbers in an auditable table. |
+|  | *From Stochastic Chaos to Deterministic Certainty* | An industrial language model wrapped in proven deterministic boundaries, mapped to the EU AI Act. **This POC's book.** |
+| Data architecture | *From Schema to System* | The complete schema atlas: 17 domains, 654 tables, with ER diagrams and verification queries behind the twin. |
+|  | *From Table to Twin* | The same schema built twice (Database First and Code First with EF Core) and a chapter reconciling them. |
+|  | *From Entity to Context* | Clean EF Core mapping of the schema: one configuration per entity instead of a giant OnModelCreating. |
+| Domain-Driven Design | *From Domain to Twin* | DDD from scratch in plain language, applied to NEXUS-1: from entities and aggregates to the SQL schema. |
+|  | *From Context to Flow* | Advanced DDD patterns (context maps, sagas, outbox) through one flow that crosses nine bounded contexts. |
+| Backend trilogy (.NET) | *From Blueprint to Core* | Domain and application layers without a database or web server: 17 contexts, 50 green tests in about 600 ms. |
+|  | *From Core to Contract* | The core gets a database (EF Core, 654 tables) and a public API, with infrastructure strictly below the seam. |
+|  | *From Contract to Container* | Integration tests on a real SQL Server via Testcontainers, an outbox that survives a killed process, a CI gate. |
+| Microservices | *From Flow to Services* | More than 70 chapters: microservices as a consequence of mature boundaries, not a starting point, and when distribution is not worth it. |
+|  | *From Services to Runtime* | Three owning services on a real .NET runtime blueprint: inbox/outbox, JWT, OpenTelemetry, Kubernetes. |
+| Formal methods | *From Flow to Proof* | Architectural promises become proofs: state machines, TLA+, Petri nets, category theory; model versus implementation. |
+| Systems trilogy (below .NET) | *From Runtime to Distribution — Volume I* | From C# to the hardware: CPU, kernel mode, threads, inside the CLR (JIT, Native AOT), memory and GC. |
+|  | *From Runtime to Distribution — Volume II* | The process boundary: concurrency, async/await as a state machine, IPC, TCP/TLS/gRPC and the “Boundary Ledger”. |
+|  | *From Runtime to Distribution — Volume III* | Production: containers, Kubernetes, SLIs/SLOs, canary deployments and practical observability. |
+| Frontend (Angular) | *From File to Framework* | A 5,900-line single-file console becomes a real Angular application, and every screen is checked for “honesty”. |
+| Retrospective | *From Certainty to Calibration* | The author revisits six of his own decisions: then → mechanism → lesson → now → what the correction risks. |
+
+Books that connect directly to this POC: *From Flood to Cause* and *From Trial to Policy* (the same idea of a deterministic core with an explaining or learning component around it), *From Domain to Twin* and *From Blueprint to Core* (the DDD and layering used here), *From Flow to Proof* (turning the Neural Constitution's promises into proofs), and *From Certainty to Calibration* (the same habit as this POC's Part V: revisiting one's own decisions).
+
 
 ---
 *Disclaimer: This codebase is a theoretical architectural companion to the NEXUS-1 project. It is intended strictly for educational and modeling demonstrations. It should not be used to operate or make automated safety decisions in real nuclear or critical industrial facilities.*
